@@ -14,6 +14,10 @@ on:
         description: "How many times to run the smoke test."
         type: string
         default: "1"
+      trace:
+        description: "1 = log Wayland protocol traffic for fuzzel (diagnosis)."
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       only:
@@ -24,6 +28,10 @@ on:
         description: "How many times to run the smoke test."
         type: string
         default: "1"
+      trace:
+        description: "1 = log Wayland protocol traffic for fuzzel (diagnosis)."
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -83,9 +91,10 @@ jobs:
         env:
           ONLY: ${{ inputs.only }}
           REPEAT: ${{ inputs.repeat }}
+          TRACE_WAYLAND: ${{ inputs.trace }}
         run: |
           # Tools need a session D-Bus; dbus-run-session provides one for sway and the tools.
-          runuser -u builder -- env HOME=/home/builder PATH="$PATH" ONLY="$ONLY" REPEAT="$REPEAT" \
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" ONLY="$ONLY" REPEAT="$REPEAT" TRACE_WAYLAND="$TRACE_WAYLAND" \
             dbus-run-session -- bash -c "cd '$GITHUB_WORKSPACE' && OUT='$GITHUB_WORKSPACE/smoke-out' bash scripts/smoke-repeat.sh"
 
       - name: Add the smoke summary to the job summary

@@ -85,7 +85,10 @@ launch() {
   case "$1" in
     waybar) waybar -c "$HOME/.config/waybar/config.jsonc" -s "$HOME/.config/waybar/style.css" ;;
     foot) foot ;;
-    fuzzel) (sleep 3600 | fuzzel) ;;
+    fuzzel)
+      # TRACE_WAYLAND=1 logs every Wayland message fuzzel sends and receives (diagnosis only).
+      if [ "${TRACE_WAYLAND:-}" = 1 ]; then export WAYLAND_DEBUG=1; fi
+      (sleep 3600 | fuzzel) ;;
     mako) mako ;;
     swaybg) swaybg -i "$HOME/.local/share/backgrounds/deskwizard/wallpaper.png" -m fill ;;
   esac
