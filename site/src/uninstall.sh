@@ -67,11 +67,8 @@ if [ -d "$LATEST" ]; then
     fi
   done < <(find "$LATEST" -type f -print0)
 fi
-if [ -d "$LATEST/system" ]; then
-  restore_tree "$LATEST/system" "" sudo
-fi
-
-# Remove the marked block from ~/.profile.
+# Remove the marked block from ~/.profile. This runs before the system restore, so a sudo
+# failure there cannot leave the block behind.
 PROFILE="$HOME/.profile"
 if [ -f "$PROFILE" ] && grep -q '^# BEGIN deskwizard$' "$PROFILE"; then
   if [ "$DRY_RUN" = true ]; then
@@ -83,6 +80,10 @@ if [ -f "$PROFILE" ] && grep -q '^# BEGIN deskwizard$' "$PROFILE"; then
     rm -f "$tmp"
     log "removed the deskwizard block from $PROFILE"
   fi
+fi
+
+if [ -d "$LATEST/system" ]; then
+  restore_tree "$LATEST/system" "" sudo
 fi
 
 if [ "$DRY_RUN" = true ]; then
