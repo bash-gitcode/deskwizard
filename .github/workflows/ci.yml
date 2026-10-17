@@ -76,6 +76,7 @@ jobs:
       - name: Build the catalog
         run: |
           npm ci
+          node scripts/render-wallpapers.mjs
           node scripts/validate.mjs
           node scripts/build-catalog.mjs
 
