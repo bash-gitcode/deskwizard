@@ -49,6 +49,14 @@ async function main() {
   const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
   const next = () => page.getByRole("button", { name: "Next", exact: true }).click();
+  // The add-on tools come before Waybar (terminal, launcher). Skip them with Next until the Waybar page shows.
+  const toWaybar = async () => {
+    for (let i = 0; i < 6; i++) {
+      const here = await page.getByRole("heading", { name: "Waybar" }).waitFor({ timeout: 1000 }).then(() => true, () => false);
+      if (here) return;
+      await next();
+    }
+  };
 
   // 1. Distro
   await page.goto(base);
@@ -80,7 +88,7 @@ async function main() {
   const paletteRadios = page.locator("input[name=palette]");
   check((await paletteRadios.count()) >= 2, "palette step lists at least two palettes");
   await paletteRadios.nth(1).check();
-  check((await page.locator(".swatch").count()) === 8, "palette step shows the 8 color swatches");
+  check((await page.locator(".swatches").first().locator(".swatch").count()) === 8, "the selected palette shows its 8 color swatches");
   await shot(page, "palette");
   await next();
 
@@ -90,6 +98,7 @@ async function main() {
   await next();
 
   // 5. Waybar: pick a variant, expect the Nerd Font prompt
+  await toWaybar();
   await page.getByRole("heading", { name: "Waybar" }).waitFor();
   const variantCards = page.locator(".variant");
   const variantCount = await variantCards.count();
@@ -137,6 +146,7 @@ async function main() {
   await next();
   await page.getByRole("radio", { name: /Font Awesome only/ }).check();
   await next();
+  await toWaybar();
   await page.getByRole("button", { name: "Use this" }).first().click();
   await next();
   await page.getByRole("heading", { name: "Review" }).waitFor();
