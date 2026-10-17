@@ -1,14 +1,37 @@
 // Fails if any file in the repo looks like it holds a secret.
 // Checks file names (*password*, *secret*, *.pem) and contents ("sudo password").
 import { execFileSync } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { join, relative } from "node:path";
 
 const NAME_PATTERNS = [/password/i, /secret/i, /\.pem$/i];
 const CONTENT_PATTERNS = [/sudo password/i];
+const SKIP_DIRS = new Set([".git", "node_modules", "dist"]);
 
-const files = execFileSync("git", ["ls-files", "-co", "--exclude-standard"], { encoding: "utf8" })
-  .split("\n")
-  .filter(Boolean);
+// Lists the files to check: git's view when this is a checkout, otherwise a walk of the tree.
+// The CI container has no git until its first apt step, and actions/checkout may not leave .git there.
+function listFiles() {
+  try {
+    return execFileSync("git", ["ls-files", "-co", "--exclude-standard"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+      .split("\n")
+      .filter(Boolean);
+  } catch {
+    const out = [];
+    const walk = (dir) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          if (!SKIP_DIRS.has(entry.name)) walk(join(dir, entry.name));
+        } else {
+          out.push(relative(".", join(dir, entry.name)));
+        }
+      }
+    };
+    walk(".");
+    return out;
+  }
+}
+
+const files = listFiles().map((f) => f.replaceAll("\\", "/").replace(/^\.\//, ""));
 
 const problems = [];
 for (const file of files) {
