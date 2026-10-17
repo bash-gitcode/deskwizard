@@ -10,6 +10,7 @@
   },
   "scripts": {
     "validate": "node scripts/validate.mjs",
+    "check-secrets": "node scripts/check-secrets.mjs",
     "build-catalog": "node scripts/build-catalog.mjs",
     "generate-install": "node scripts/generate-install.mjs",
     "dev": "vite --config vite.config.js",

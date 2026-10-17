@@ -4,12 +4,6 @@ good_for:
   - Wallpaper-forward desktops
   - Light, airy look
   - Users who like translucent panels
-palette:
-  bg: "#263238"
-  fg: "#eceff1"
-  accent: "#80cbc4"
-  warn: "#ffe082"
-  crit: "#ef9a9a"
 requires:
   - sway
 options:

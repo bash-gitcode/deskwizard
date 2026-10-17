@@ -8,7 +8,16 @@ display:
   order: 1
 works_with:
   - waybar
+  - foot
+  - fuzzel
+  - mako
+  - swaybg
 requires: []
+extras:
+  - portal
+  - polkit
+  - screenshot
+  - media-keys
 packages:
   debian13:
     - sway
@@ -16,6 +25,41 @@ packages:
 difficulty: medium
 ram_mb: 150
 default_variant: null
+command: null
+autostart: []
+binds:
+  - { key: "$mod+Return", command: "exec $term", label: "Open a terminal" }
+  - { key: "$mod+Shift+q", command: "kill", label: "Close the focused window" }
+  - { key: "$mod+Shift+c", command: "reload", label: "Reload the Sway config" }
+  - { key: "$mod+Escape", command: "exec swaylock -f -c 000000", label: "Lock the screen" }
+  - { key: "$mod+Shift+e", command: "exec swaynag -t warning -m 'Exit Sway?' -B 'Yes, exit' 'swaymsg exit'", label: "Exit Sway" }
+  - { key: "$mod+h", command: "focus left", label: "Move focus (h j k l, or the arrow keys)" }
+  - { key: "$mod+j", command: "focus down", label: null }
+  - { key: "$mod+k", command: "focus up", label: null }
+  - { key: "$mod+l", command: "focus right", label: null }
+  - { key: "$mod+Left", command: "focus left", label: null }
+  - { key: "$mod+Down", command: "focus down", label: null }
+  - { key: "$mod+Up", command: "focus up", label: null }
+  - { key: "$mod+Right", command: "focus right", label: null }
+  - { key: "$mod+Shift+h", command: "move left", label: "Move the window (Shift + h j k l)" }
+  - { key: "$mod+Shift+j", command: "move down", label: null }
+  - { key: "$mod+Shift+k", command: "move up", label: null }
+  - { key: "$mod+Shift+l", command: "move right", label: null }
+  - { key: "$mod+f", command: "fullscreen toggle", label: "Fullscreen on or off" }
+  - { key: "$mod+Shift+space", command: "floating toggle", label: "Floating on or off" }
+  - { key: "$mod+s", command: "layout stacking", label: "Stacked layout" }
+  - { key: "$mod+w", command: "layout tabbed", label: "Tabbed layout" }
+  - { key: "$mod+e", command: "layout toggle split", label: "Split layout" }
+  - { key: "$mod+1", command: "workspace number 1", label: "Switch workspace (1 to 5)" }
+  - { key: "$mod+2", command: "workspace number 2", label: null }
+  - { key: "$mod+3", command: "workspace number 3", label: null }
+  - { key: "$mod+4", command: "workspace number 4", label: null }
+  - { key: "$mod+5", command: "workspace number 5", label: null }
+  - { key: "$mod+Shift+1", command: "move container to workspace number 1", label: "Move the window to a workspace (Shift + 1 to 5)" }
+  - { key: "$mod+Shift+2", command: "move container to workspace number 2", label: null }
+  - { key: "$mod+Shift+3", command: "move container to workspace number 3", label: null }
+  - { key: "$mod+Shift+4", command: "move container to workspace number 4", label: null }
+  - { key: "$mod+Shift+5", command: "move container to workspace number 5", label: null }
 install:
   - target: "~/.config/sway/config"
     from: tool

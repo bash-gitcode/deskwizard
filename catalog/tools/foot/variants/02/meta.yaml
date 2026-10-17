@@ -1,0 +1,8 @@
+id: compact
+name: Compact
+good_for:
+  - Small screens
+  - Lots of output
+requires:
+  - sway
+screenshot: screenshot.svg

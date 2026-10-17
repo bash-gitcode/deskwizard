@@ -1,0 +1,15 @@
+id: slate
+name: Cool Slate
+mode: light
+default: false
+tokens:
+  bg: "#eef1f5"
+  surface: "#dde3ec"
+  fg: "#1f2933"
+  muted: "#5b6776"
+  accent: "#0b7285"
+  accent2: "#5f3dc4"
+  warn: "#b45309"
+  error: "#b91c1c"
+  font_ui: sans-serif
+  font_mono: monospace

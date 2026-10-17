@@ -1,0 +1,26 @@
+id: foot
+name: Foot
+type: terminal
+description: Small, fast terminal for Wayland. Five looks that follow the chosen palette.
+needed: recommended
+needed_reason: Sway opens a terminal with $mod+Return. Without one, that shortcut does nothing.
+display:
+  order: 2
+works_with:
+  - sway
+requires:
+  - sway
+extras: []
+packages:
+  debian13:
+    - foot
+difficulty: easy
+ram_mb: 20
+default_variant: classic
+command: foot
+autostart: []
+binds: []
+install:
+  - target: "~/.config/foot/foot.ini"
+    from: variant
+    source: foot.ini

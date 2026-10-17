@@ -1,0 +1,9 @@
+id: dusk
+name: Dusk
+good_for:
+  - Warm evenings
+  - Soft look
+requires:
+  - sway
+wallpaper: wallpaper.png
+screenshot: screenshot.svg

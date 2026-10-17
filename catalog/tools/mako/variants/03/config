@@ -1,0 +1,21 @@
+# mako notification config (deskwizard variant: center).
+# Colors come from your palette.
+anchor=top-center
+width=400
+margin=10
+padding=12
+border-size=2
+border-radius=12
+background-color=$surface
+text-color=$fg
+border-color=$accent
+font=$font_ui 11
+default-timeout=6000
+max-visible=5
+
+[urgency=low]
+border-color=$muted
+
+[urgency=high]
+border-color=$error
+default-timeout=0

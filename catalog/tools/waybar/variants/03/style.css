@@ -1,11 +1,11 @@
 /* deskwizard variant 03: powerline.
  * Palette colors are @define-color names (GTK CSS has no var()).
  * Only the lines below may contain color literals. */
-@define-color bg #1b1d2b;
-@define-color fg #e0def4;
-@define-color accent #31748f;
-@define-color warn #f6c177;
-@define-color crit #eb6f92;
+@define-color bg $bg;
+@define-color fg $fg;
+@define-color accent $accent;
+@define-color warn $warn;
+@define-color crit $error;
 
 * {
   font-family: "{{NERD_FONT}}", "FontAwesome", sans-serif;

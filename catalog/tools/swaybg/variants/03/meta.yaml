@@ -1,0 +1,9 @@
+id: mono
+name: Mono
+good_for:
+  - Distraction-free
+  - Minimal look
+requires:
+  - sway
+wallpaper: wallpaper.png
+screenshot: screenshot.svg

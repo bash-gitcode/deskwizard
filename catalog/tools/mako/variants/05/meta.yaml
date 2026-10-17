@@ -1,0 +1,8 @@
+id: compact
+name: Compact
+good_for:
+  - Small screens
+  - Short-lived alerts
+requires:
+  - sway
+screenshot: screenshot.svg

@@ -22,6 +22,9 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends nodejs npm shellcheck ca-certificates
 
+      - name: Refuse secret-looking files
+        run: node scripts/check-secrets.mjs
+
       - name: Build the site and installer
         run: |
           npm ci

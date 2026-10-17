@@ -1,0 +1,8 @@
+id: wide
+name: Wide
+good_for:
+  - Many apps
+  - Big monitors
+requires:
+  - sway
+screenshot: screenshot.svg

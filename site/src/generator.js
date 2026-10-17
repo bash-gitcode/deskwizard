@@ -2,24 +2,31 @@
 // No DOM access, so the same code runs in the browser and in scripts/generate-install.mjs.
 //
 // State (in memory):
-//   { distro: "debian13", display: "wayland", font: "jetbrains-mono",
+//   { distro: "debian13", display: "wayland", font: "jetbrains-mono", palette: "midnight",
+//     extras: ["portal", "polkit", ...],
 //     choices: { sway: { variant: null }, waybar: { variant: "minimal" } } }
 // Only chosen tools appear in `choices`. A tool that is skipped is simply absent.
+// `extras` lists the add-ons the user accepted ("Also needs" in the wizard).
 //
 // Payload (Save/Load YAML and share link). Only these fields, no timestamps or host info:
-//   schema_version: 2
+//   schema_version: 3
 //   catalog_version: "0.1.0"
-//   choices: { distro, display, font, tools: { <tool id>: { variant } } }
-// Schema 1 (`deskwizard: 1`, flat choices) is still accepted so older links resolve.
+//   choices: { distro, display, font, palette, extras, tools: { <tool id>: { variant } } }
+// Schema 2 (no palette/extras) and schema 1 (`deskwizard: 1`, flat choices) are still accepted.
 
 const SAFE_PKG = /^[a-z0-9][a-z0-9.+-]*$/;
 export const HEREDOC = "DESKWIZARD_EOF";
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
+export const DEFAULT_PALETTE = "midnight";
 export const NERD_FONT_TOKEN = "{{NERD_FONT}}";
 // Packages every bar build adds on top of the bar's own list. Also used by scripts/list-packages.mjs.
 export const BAR_EXTRA_PACKAGES = ["fontconfig", "curl"];
 // Largest base64 string that fits in one command-line argument (Linux MAX_ARG_STRLEN is 128 KiB).
 export const MAX_ONE_LINE_BASE64 = 120000;
+// Palette tokens in variant files: $bg, $accent2, $font_mono, and color forms $bg_hex (no #) and $bg_hexff (RRGGBBff).
+const TOKEN_RE = /\$(font_ui|font_mono|[a-z][a-z0-9]*)(_hexff|_hex)?/g;
+export const PALETTE_COLOR_TOKENS = ["bg", "surface", "fg", "muted", "accent", "accent2", "warn", "error"];
+export const PALETTE_FONT_TOKENS = ["font_ui", "font_mono"];
 
 function toolById(catalog, id) {
   return catalog.tools.find((t) => t.id === id);
@@ -29,7 +36,54 @@ export function fontById(catalog, id) {
   return catalog.fonts.fonts.find((f) => f.id === id);
 }
 
-// Returns { errors, chosen, distro, font }. `chosen` is the list of catalog tools in display order.
+export function paletteById(catalog, id) {
+  return (catalog.palettes ?? []).find((p) => p.id === id);
+}
+
+function extraById(catalog, id) {
+  return (catalog.extras ?? []).find((e) => e.id === id);
+}
+
+// Extras that the chosen tools need but the state has not accepted yet.
+// Used by the wizard for "Also needs: X [Add]".
+export function missingExtras(state, catalog) {
+  const chosen = Object.keys(state?.choices ?? {}).map((id) => toolById(catalog, id)).filter(Boolean);
+  const accepted = state?.extras ?? [];
+  const missing = [];
+  for (const tool of chosen) {
+    for (const id of tool.extras ?? []) {
+      if (!accepted.includes(id) && !missing.includes(id)) missing.push(id);
+    }
+  }
+  return missing;
+}
+
+// Replaces $tokens in a variant file with values from the palette.
+// Returns { text, unknown }. `unknown` lists tokens the palette does not define.
+export function resolveTokens(text, palette) {
+  const unknown = [];
+  const out = text.replace(TOKEN_RE, (match, name, suffix) => {
+    if (name.startsWith("font_")) {
+      const value = palette.tokens[name];
+      if (value === undefined || suffix) {
+        unknown.push(match);
+        return match;
+      }
+      return value;
+    }
+    const value = palette.tokens[name];
+    if (value === undefined || !/^#[0-9a-fA-F]{6}$/.test(value)) {
+      unknown.push(match);
+      return match;
+    }
+    if (suffix === "_hex") return value.slice(1);
+    if (suffix === "_hexff") return value.slice(1) + "ff";
+    return value;
+  });
+  return { text: out, unknown };
+}
+
+// Returns { errors, chosen, distro, font, palette, extras }. `chosen` is the list of catalog tools in display order.
 export function validateState(state, catalog) {
   const errors = [];
   const distro = catalog.distros.find((d) => d.id === state?.distro);
@@ -40,6 +94,9 @@ export function validateState(state, catalog) {
 
   const font = fontById(catalog, state?.font);
   if (!font) errors.push(`Unknown font '${state?.font}'. Pick one of the listed fonts.`);
+
+  const palette = paletteById(catalog, state?.palette ?? DEFAULT_PALETTE);
+  if (!palette) errors.push(`Unknown palette '${state?.palette}'. Pick one of the listed palettes.`);
 
   const choices = state?.choices ?? {};
   const chosen = [];
@@ -52,6 +109,17 @@ export function validateState(state, catalog) {
     chosen.push(tool);
   }
   chosen.sort((a, b) => a.display.order - b.display.order);
+
+  // Extras the user accepted, plus every extra the chosen tools need. A tool like Sway cannot
+  // work without its portal and polkit agent, so those are always included in the build.
+  const accepted = state?.extras ?? [];
+  for (const id of accepted) {
+    if (!extraById(catalog, id)) errors.push(`Unknown extra '${id}'.`);
+  }
+  const extras = [...accepted];
+  for (const tool of chosen) {
+    for (const id of tool.extras ?? []) if (!extras.includes(id)) extras.push(id);
+  }
 
   const compositors = chosen.filter((t) => t.type === "compositor");
   if (compositors.length !== 1) errors.push("Choose exactly one compositor (Sway).");
@@ -72,14 +140,24 @@ export function validateState(state, catalog) {
       }
     }
   }
-  return { errors, chosen, distro, font };
+  return { errors, chosen, distro, font, palette, extras };
+}
+
+// Renders the key for the cheat sheet and for sway: "$mod+Return" -> "Super+Return".
+function prettyKey(key) {
+  return key.replaceAll("$mod", "Super");
 }
 
 // Builds the install plan. Never throws; returns { ok, errors, plan }.
 export function buildPlan(state, catalog) {
-  const { errors, chosen, distro, font } = validateState(state, catalog);
+  const { errors, chosen, distro, font, palette, extras } = validateState(state, catalog);
   const packages = [];
   const files = [];
+  const binds = [];
+  const autostart = [];
+  const cheatsheet = [];
+  const activeExtras = (extras ?? []).map((id) => extraById(catalog, id)).filter(Boolean);
+  const neededExtras = activeExtras.filter((e) => chosen.some((t) => (t.extras ?? []).includes(e.id)));
 
   if (!errors.length) {
     for (const tool of chosen) {
@@ -89,6 +167,9 @@ export function buildPlan(state, catalog) {
         continue;
       }
       for (const pkg of list) if (!packages.includes(pkg)) packages.push(pkg);
+    }
+    for (const extra of neededExtras) {
+      for (const pkg of extra.packages[distro.id] ?? []) if (!packages.includes(pkg)) packages.push(pkg);
     }
   }
 
@@ -102,11 +183,41 @@ export function buildPlan(state, catalog) {
     }
   }
 
+  // Keybinds and startup lines: from the chosen tools, then from the accepted extras.
+  const bindSources = [...chosen.map((t) => ({ owner: t.id, items: t.binds ?? [] })), ...neededExtras.map((e) => ({ owner: e.id, items: e.binds ?? [] }))];
+  for (const src of bindSources) {
+    for (const b of src.items) {
+      const dup = binds.find((x) => x.key === b.key);
+      if (dup) {
+        errors.push(`two features use the key ${b.key} (${dup.owner} and ${src.owner}).`);
+        continue;
+      }
+      binds.push({ key: b.key, command: b.command, label: b.label ?? null, owner: src.owner });
+      if (b.label) cheatsheet.push(`  ${prettyKey(b.key).padEnd(24)} ${b.label}`);
+    }
+  }
+  for (const tool of chosen) for (const line of tool.autostart ?? []) autostart.push({ line, owner: tool.id });
+  for (const extra of neededExtras) for (const line of extra.autostart ?? []) autostart.push({ line, owner: extra.id });
+
   if (!errors.length) {
     // Bar block for the Sway config: point Sway's bar at the chosen bar binary.
     const barBlock = bars.length
-      ? `bar {\n    swaybar_command ${bars[0].id}\n}`
+      ? `bar {\n    swaybar_command ${bars[0].command ?? bars[0].id}\n}`
       : "# No status bar selected. Sway starts without one.";
+    const terminal = chosen.find((t) => t.type === "terminal");
+    // Sway only treats # as a comment at the start of a line, so notes go on their own line.
+    const termCmd = terminal?.command ?? "foot";
+    const bindBlock = binds
+      .map((b) => (b.label ? `# ${b.label}\n` : "") + `bindsym ${b.key} ${b.command}`)
+      .join("\n");
+    const execBlock =
+      autostart.map((a) => `# started by ${a.owner}\nexec ${a.line}`).join("\n") || "# Nothing to start at login.";
+    const subs = {
+      "{{BAR_BLOCK}}": barBlock,
+      "{{BINDS}}": bindBlock,
+      "{{EXEC}}": execBlock,
+      "{{TERM_CMD}}": termCmd,
+    };
     const family = font.family ? `"${font.family}", ` : "";
 
     for (const tool of chosen) {
@@ -124,9 +235,22 @@ export function buildPlan(state, catalog) {
           errors.push(`two selected tools write the same file: ${target}.`);
           continue;
         }
+        let out = content;
+        let binary = Boolean(item.binary);
+        if (!binary) {
+          // Palette tokens are resolved only in variant text files; the tool's own files use placeholders.
+          if (item.from === "variant") {
+            const res = resolveTokens(out, palette);
+            if (res.unknown.length) errors.push(`${tool.name} '${variant?.id}': unknown token ${res.unknown.join(", ")}.`);
+            out = res.text;
+          }
+          out = out.replaceAll(`"${NERD_FONT_TOKEN}", `, family);
+          for (const [key, value] of Object.entries(subs)) out = out.replaceAll(key, value);
+        }
         files.push({
           target,
-          content: content.replaceAll("{{BAR_BLOCK}}", barBlock).replaceAll(`"${NERD_FONT_TOKEN}", `, family),
+          content: out,
+          binary,
           from: `${tool.id}${variant ? "/" + variant.id : ""}`,
         });
       }
@@ -137,7 +261,7 @@ export function buildPlan(state, catalog) {
     if (!SAFE_PKG.test(pkg)) errors.push(`package name '${pkg}' is not a valid apt name.`);
   }
   for (const f of files) {
-    if (f.content.split("\n").some((line) => line === HEREDOC)) {
+    if (!f.binary && f.content.split("\n").some((line) => line === HEREDOC)) {
       errors.push(`file ${f.target} contains the reserved line ${HEREDOC}.`);
     }
   }
@@ -151,9 +275,12 @@ export function buildPlan(state, catalog) {
       packages,
       files,
       font,
+      palette: palette.id,
       downloadFont,
       bars: bars.map((b) => b.id),
       chosen: chosen.map((t) => t.id),
+      binds,
+      cheatsheet,
     },
   };
 }
@@ -164,10 +291,18 @@ export function renderScript(plan, fonts, template) {
   const fileBlocks = plan.files
     .map((file) => {
       const target = file.target.replace(/^~\//, "$HOME/");
+      if (file.binary) {
+        // Binary files (wallpapers) are stored base64 in the catalog and decoded here.
+        return `# ${file.from}\nbase64 -d <<'${HEREDOC}' | write_file "${target}"\n${file.content}\n${HEREDOC}\n`;
+      }
       const body = file.content.endsWith("\n") ? file.content : file.content + "\n";
       return `# ${file.from}\nwrite_file "${target}" <<'${HEREDOC}'\n${body}${HEREDOC}\n`;
     })
     .join("\n");
+
+  const cheat = plan.cheatsheet.length
+    ? `cat <<'${HEREDOC}'\nYour keys (Super = the Windows key):\n${plan.cheatsheet.join("\n")}\n${HEREDOC}`
+    : "# No keybinds in this build.";
 
   const destRoot = fonts.dest_root.replace(/^~\//, "$HOME/");
   const subs = {
@@ -180,6 +315,7 @@ export function renderScript(plan, fonts, template) {
     "@@FONT_DEST@@": f.dest ? `${destRoot}/${f.dest}` : "",
     "@@FONT_FALLBACK@@": f.fallback_package,
     "# @@FILES@@": fileBlocks,
+    "# @@CHEATSHEET@@": cheat,
   };
   let out = template;
   for (const [key, value] of Object.entries(subs)) out = out.split(key).join(value);
@@ -223,18 +359,21 @@ export function toPayload(state, catalogVersion) {
       distro: state.distro,
       display: state.display,
       font: state.font,
+      palette: state.palette ?? DEFAULT_PALETTE,
+      extras: [...(state.extras ?? [])],
       tools,
     },
   };
 }
 
-// Accepts schema 2 and the legacy schema 1. Returns { state, notices }.
+// Accepts schema 3, 2 and the legacy schema 1. Returns { state, notices }.
+// `catalog` is optional; older payloads need it to find the extras their tools use.
 // Throws a plain-language Error for anything else.
-export function fromPayload(obj, currentCatalogVersion) {
+export function fromPayload(obj, currentCatalogVersion, catalog) {
   if (!obj || typeof obj !== "object") throw new Error("This is not a deskwizard build.");
   const notices = [];
 
-  if (obj.schema_version === SCHEMA_VERSION) {
+  if (obj.schema_version === SCHEMA_VERSION || obj.schema_version === 2) {
     const c = obj.choices ?? {};
     if (typeof c !== "object") throw new Error("The build's choices are missing.");
     if (obj.catalog_version !== currentCatalogVersion) {
@@ -243,8 +382,25 @@ export function fromPayload(obj, currentCatalogVersion) {
           `The current catalog is ${currentCatalogVersion}. Check each choice on the Review step.`
       );
     }
+    let extras = Array.isArray(c.extras) ? [...c.extras] : null;
+    if (extras === null) {
+      // Schema 2 had no extras: accept every extra the chosen tools use, as the old build did.
+      extras = [];
+      for (const id of Object.keys(c.tools ?? {})) {
+        const tool = catalog ? toolById(catalog, id) : null;
+        for (const e of tool?.extras ?? []) if (!extras.includes(e)) extras.push(e);
+      }
+      notices.push("This build was saved before palettes existed. The default palette was applied.");
+    }
     return {
-      state: { distro: c.distro ?? null, display: c.display ?? "wayland", font: c.font ?? null, choices: c.tools ?? {} },
+      state: {
+        distro: c.distro ?? null,
+        display: c.display ?? "wayland",
+        font: c.font ?? null,
+        palette: c.palette ?? DEFAULT_PALETTE,
+        extras,
+        choices: c.tools ?? {},
+      },
       notices,
     };
   }
@@ -255,7 +411,14 @@ export function fromPayload(obj, currentCatalogVersion) {
         "Check the choices on the Review step."
     );
     return {
-      state: { distro: obj.distro ?? null, display: obj.display ?? "wayland", font: null, choices: obj.choices ?? {} },
+      state: {
+        distro: obj.distro ?? null,
+        display: obj.display ?? "wayland",
+        font: null,
+        palette: DEFAULT_PALETTE,
+        extras: [],
+        choices: obj.choices ?? {},
+      },
       notices,
     };
   }

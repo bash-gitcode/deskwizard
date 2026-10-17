@@ -5,11 +5,12 @@ description: Status bar for Sway showing workspaces, window title, clock, networ
 needed: recommended
 needed_reason: Sway runs without a bar, but you lose workspace and status information at a glance.
 display:
-  order: 2
+  order: 4
 works_with:
   - sway
 requires:
   - sway
+extras: []
 packages:
   debian13:
     - waybar
@@ -17,6 +18,9 @@ packages:
 difficulty: easy
 ram_mb: 40
 default_variant: minimal
+command: waybar
+autostart: []
+binds: []
 install:
   - target: "~/.config/waybar/config.jsonc"
     from: variant

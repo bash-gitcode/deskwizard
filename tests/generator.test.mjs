@@ -27,13 +27,13 @@ test("payload stores only choices and versions", () => {
   assert.equal(payload.schema_version, SCHEMA_VERSION);
   assert.equal(payload.catalog_version, catalog.catalog_version);
   assert.deepEqual(Object.keys(payload).sort(), ["catalog_version", "choices", "schema_version"]);
-  assert.deepEqual(Object.keys(payload.choices).sort(), ["display", "distro", "font", "tools"]);
+  assert.deepEqual(Object.keys(payload.choices).sort(), ["display", "distro", "extras", "font", "palette", "tools"]);
 });
 
 test("round trip keeps the build", () => {
   const { state, notices } = fromPayload(toPayload(sway, catalog.catalog_version), catalog.catalog_version);
   assert.deepEqual(notices, []);
-  assert.deepEqual(state, { distro: "debian13", display: "wayland", font: "jetbrains-mono", choices: { sway: { variant: null }, waybar: { variant: "minimal" } } });
+  assert.deepEqual(state, { distro: "debian13", display: "wayland", font: "jetbrains-mono", palette: "midnight", extras: [], choices: { sway: { variant: null }, waybar: { variant: "minimal" } } });
 });
 
 test("old catalog version loads with a notice, not an error", () => {

@@ -1,0 +1,49 @@
+# Extras are add-ons a tool needs to work well (portal, polkit agent, screenshot and media keys).
+# A tool lists extra ids in its `extras` field. The wizard shows "Also needs" until the user adds them.
+- id: portal
+  name: Desktop portal
+  reason: Lets apps open file pickers and share screens on Wayland.
+  packages:
+    debian13: [xdg-desktop-portal, xdg-desktop-portal-wlr]
+  autostart:
+    - dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway
+  binds: []
+- id: polkit
+  name: Polkit agent
+  reason: Shows a password prompt when an app needs admin rights.
+  packages:
+    debian13: [lxpolkit]
+  autostart: [lxpolkit]
+  binds: []
+- id: screenshot
+  name: Screenshots (grim and slurp)
+  reason: Lets you pick a region of the screen and save it as a PNG.
+  packages:
+    debian13: [grim, slurp]
+  autostart: []
+  binds:
+    - key: Print
+      command: exec grim -g "$(slurp)" ~/screenshot-$(date +%F-%T).png
+      label: Screenshot of a region (saved to your home folder)
+- id: media-keys
+  name: Volume and brightness keys
+  reason: Makes the keyboard volume and brightness keys work.
+  packages:
+    debian13: [pulseaudio-utils, brightnessctl]
+  autostart: []
+  binds:
+    - key: XF86AudioRaiseVolume
+      command: exec pactl set-sink-volume @DEFAULT_SINK@ +5%
+      label: Volume up
+    - key: XF86AudioLowerVolume
+      command: exec pactl set-sink-volume @DEFAULT_SINK@ -5%
+      label: Volume down
+    - key: XF86AudioMute
+      command: exec pactl set-sink-mute @DEFAULT_SINK@ toggle
+      label: Mute
+    - key: XF86MonBrightnessUp
+      command: exec brightnessctl set +5%
+      label: Brightness up
+    - key: XF86MonBrightnessDown
+      command: exec brightnessctl set 5%-
+      label: Brightness down

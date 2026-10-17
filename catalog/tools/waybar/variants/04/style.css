@@ -1,11 +1,11 @@
 /* deskwizard variant 04: glass.
  * Palette colors are @define-color names (GTK CSS has no var()).
  * Only the lines below may contain color literals. */
-@define-color bg #263238;
-@define-color fg #eceff1;
-@define-color accent #80cbc4;
-@define-color warn #ffe082;
-@define-color crit #ef9a9a;
+@define-color bg $bg;
+@define-color fg $fg;
+@define-color accent $accent;
+@define-color warn $warn;
+@define-color crit $error;
 
 /* Translucent variants of the palette, used by the glass look. */
 @define-color glass_bar rgba(38, 50, 56, 0.55);

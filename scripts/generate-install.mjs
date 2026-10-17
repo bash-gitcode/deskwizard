@@ -15,9 +15,15 @@ const DEFAULT_STATE = {
   distro: "debian13",
   display: "wayland",
   font: "jetbrains-mono",
+  palette: "midnight",
+  extras: [],
   choices: {
     sway: { variant: null },
+    foot: { variant: "classic" },
+    fuzzel: { variant: "classic" },
     waybar: { variant: "minimal" },
+    mako: { variant: "corner" },
+    swaybg: { variant: "dusk" },
   },
 };
 

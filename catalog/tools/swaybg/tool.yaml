@@ -1,0 +1,28 @@
+id: swaybg
+name: Wallpaper (swaybg)
+type: wallpaper
+description: Sets a wallpaper for Sway. Three wallpapers bundled with deskwizard, generated for this project.
+needed: optional
+needed_reason: Without a wallpaper the desktop is a plain color.
+display:
+  order: 6
+works_with:
+  - sway
+requires:
+  - sway
+extras: []
+packages:
+  debian13:
+    - swaybg
+difficulty: easy
+ram_mb: 10
+default_variant: dusk
+command: swaybg
+autostart:
+  - "swaybg -i ~/.local/share/backgrounds/deskwizard/wallpaper.png -m fill"
+binds: []
+install:
+  - target: "~/.local/share/backgrounds/deskwizard/wallpaper.png"
+    from: variant
+    source: wallpaper.png
+    binary: true

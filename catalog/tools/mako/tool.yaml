@@ -1,0 +1,28 @@
+id: mako
+name: Mako
+type: notifications
+description: Notification daemon for Wayland. Shows pop-up messages from apps. Five looks that follow the palette.
+needed: optional
+needed_reason: Without it, apps that send notifications have nowhere to show them.
+display:
+  order: 5
+works_with:
+  - sway
+requires:
+  - sway
+extras: []
+packages:
+  debian13:
+    - mako-notifier
+difficulty: easy
+ram_mb: 15
+default_variant: corner
+command: null
+autostart:
+  - mako
+binds:
+  - { key: "$mod+Shift+n", command: "exec makoctl dismiss", label: "Dismiss the top notification" }
+install:
+  - target: "~/.config/mako/config"
+    from: variant
+    source: config

@@ -1,0 +1,27 @@
+id: fuzzel
+name: Fuzzel
+type: launcher
+description: Application launcher for Wayland. Press $mod+d, type a name, press Enter. Five looks that follow the palette.
+needed: recommended
+needed_reason: Without a launcher you have to know the program name and run it from a terminal.
+display:
+  order: 3
+works_with:
+  - sway
+requires:
+  - sway
+extras: []
+packages:
+  debian13:
+    - fuzzel
+difficulty: easy
+ram_mb: 15
+default_variant: classic
+command: fuzzel
+autostart: []
+binds:
+  - { key: "$mod+d", command: "exec fuzzel", label: "Open the app launcher" }
+install:
+  - target: "~/.config/fuzzel/fuzzel.ini"
+    from: variant
+    source: fuzzel.ini

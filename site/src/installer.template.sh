@@ -196,6 +196,7 @@ main() {
       log "Old configs were saved to $BACKUP_DIR"
     fi
   fi
+# @@CHEATSHEET@@
   printf '%s\n' "Log out, then run \`sway\` from the TTY."
 }
 
