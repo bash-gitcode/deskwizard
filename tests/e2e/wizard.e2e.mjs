@@ -49,6 +49,14 @@ async function main() {
   const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
   const next = () => page.getByRole("button", { name: "Next", exact: true }).click();
+  // Press Next until the named step heading shows. Optional add-on tools sit between Waybar and Review.
+  async function toStep(name) {
+    for (let i = 0; i < 15; i++) {
+      if (await page.getByRole("heading", { name }).isVisible()) return;
+      await next();
+    }
+    throw new Error(`step "${name}" never appeared`);
+  }
   // The add-on tools come before Waybar (terminal, launcher). Skip them with Next until the Waybar page shows.
   const toWaybar = async () => {
     for (let i = 0; i < 6; i++) {
@@ -121,7 +129,7 @@ async function main() {
   await page.getByRole("listitem").filter({ hasText: "Also needs: Nerd Font" }).getByRole("button", { name: "Add" }).click();
   check(!(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible()), "Nerd Font prompt goes away after Add");
   await shot(page, "waybar-font-added");
-  await next();
+  await toStep("Review");
 
   // 6. Review
   await page.getByRole("heading", { name: "Review" }).waitFor();
@@ -148,8 +156,7 @@ async function main() {
   await next();
   await toWaybar();
   await page.getByRole("button", { name: "Use this" }).first().click();
-  await next();
-  await page.getByRole("heading", { name: "Review" }).waitFor();
+  await toStep("Review");
   check((await page.getByRole("textbox", { name: "Install command" }).inputValue()) !== oneLiner, "rebuilt build differs before Load");
   await page.locator("#load-build").setInputFiles(saved);
   await page.getByRole("heading", { name: "Review" }).waitFor();

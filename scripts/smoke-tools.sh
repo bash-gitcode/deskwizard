@@ -152,6 +152,9 @@ for entry in "${VARIANTS[@]}"; do
   pkill -x "$tool" 2>/dev/null || true
   kill "$pid" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true
+  # Let the client close its Wayland connection before the next variant connects. Starting the
+  # next client while this one is still tearing down made the next fuzzel fail in CI.
+  for _ in $(seq 1 10); do pgrep -x "$tool" >/dev/null 2>&1 || break; sleep 1; done
   [ "$status" = PASS ] || failed=$((failed + 1))
 done
 
