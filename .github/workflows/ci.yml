@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:trixie
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install build tools
         run: |
@@ -79,7 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:trixie
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Node and build the site and installer
         run: |
@@ -123,7 +123,7 @@ jobs:
     outputs:
       run: ${{ steps.filter.outputs.run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -146,7 +146,7 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:trixie
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Node and build the site and installer
         run: |
@@ -179,7 +179,7 @@ jobs:
 
       - name: Upload the screenshot and logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: full-install
           path: full-install-out/
@@ -191,9 +191,9 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:trixie
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Node, sudo and python3 (for the TOML check)
+      - name: Install Node, sudo and the build tools
         run: |
           apt-get update
           apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils sudo
@@ -220,7 +220,7 @@ jobs:
 
       - name: Upload the logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: uninstall-logs
           path: uninstall-out/
@@ -232,7 +232,7 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:trixie
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Node and build the site and installer
         run: |
@@ -263,9 +263,9 @@ jobs:
       matrix:
         method: [tty1, greetd]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Node, sudo and python3 (for the TOML check)
+      - name: Install Node, sudo and the build tools
         run: |
           apt-get update
           apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils sudo python3
@@ -290,7 +290,7 @@ jobs:
 
       - name: Upload the installer log when a start method fails
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: install-log-${{ matrix.method }}
           path: install.log
@@ -318,9 +318,9 @@ jobs:
     if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -340,7 +340,7 @@ jobs:
 
       - name: Upload step screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wizard-e2e-screenshots
           path: e2e-shots/
