@@ -33,6 +33,9 @@ BAR_EXTRA_PACKAGES=(fontconfig curl xz-utils)
 BUILD_CODE=""
 DRY_RUN=false
 BACKUP_DIR="$HOME/.config-backup/$(date +%Y%m%d-%H%M%S)"
+# dpkg keeps an existing conffile (for example /etc/greetd/config.toml) and never prompts. Our file is written
+# afterwards by install_file, after the old one is backed up.
+APT_OPTS=(-o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-confdef)
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -480,8 +483,8 @@ install_packages() {
     return 0
   fi
   log "Installing packages: ${missing[*]}"
-  run sudo apt-get update
-  run sudo apt-get install -y "${missing[@]}"
+  run sudo env DEBIAN_FRONTEND=noninteractive apt-get update </dev/null
+  run sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${APT_OPTS[@]}" "${missing[@]}" </dev/null
 }
 
 install_font() {
@@ -499,7 +502,7 @@ install_font() {
   fi
   if ! curl -fsSL --max-time 600 -o "$WORK/font.tar.xz" "$url"; then
     warn "could not download $FONT_NAME. Installing $FONT_FALLBACK instead."
-    sudo apt-get install -y "$FONT_FALLBACK"
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${APT_OPTS[@]}" "$FONT_FALLBACK" </dev/null
     return 0
   fi
   local actual

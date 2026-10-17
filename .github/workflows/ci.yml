@@ -209,6 +209,11 @@ jobs:
           chmod 755 /usr/local/bin/systemctl
           chown -R builder "$GITHUB_WORKSPACE"
 
+      - name: Conffile check (existing greetd config.toml, stdin closed, timeout)
+        run: |
+          chmod +x scripts/conffile-check.sh
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" bash scripts/conffile-check.sh
+
       - name: Install, uninstall, assert
         run: |
           runuser -u builder -- env HOME=/home/builder PATH="$PATH" bash scripts/uninstall-check.sh
@@ -216,14 +221,18 @@ jobs:
       - name: Add the check summary to the job summary
         if: always()
         run: |
-          if [ -f uninstall-out/summary.md ]; then cat uninstall-out/summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+          for s in conffile-out/summary.md uninstall-out/summary.md; do
+            if [ -f "$s" ]; then cat "$s" >> "$GITHUB_STEP_SUMMARY"; fi
+          done
 
       - name: Upload the logs
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: uninstall-logs
-          path: uninstall-out/
+          path: |
+            conffile-out/
+            uninstall-out/
           if-no-files-found: warn
 
   # Job F: every pinned Nerd Font archive matches its catalog sha256, and the installer falls back
