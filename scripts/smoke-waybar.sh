@@ -33,11 +33,11 @@ chmod 700 "$XDG_RUNTIME_DIR"
 # ---- headless Sway ----------------------------------------------------------
 SWAY_CFG="$OUT/sway-config"
 cat > "$SWAY_CFG" <<'EOF'
-output HEADLESS-1 mode 1920x1080
+output * mode 1920x1080
 EOF
 
 WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman LIBSEAT_BACKEND=noop \
-  sway -c "$SWAY_CFG" > "$OUT/sway.log" 2>&1 &
+  sway -V -c "$SWAY_CFG" > "$OUT/sway.log" 2>&1 &
 SWAY_PID=$!
 
 # Wait up to 30 s for the IPC socket to answer.

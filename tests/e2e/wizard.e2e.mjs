@@ -79,8 +79,12 @@ async function main() {
   check(variantCount === 5, `Waybar shows 5 variant cards (found ${variantCount})`);
   const imgs = page.locator(".variant img");
   for (let i = 0; i < (await imgs.count()); i++) {
-    await imgs.nth(i).waitFor({ state: "visible" });
-    const ok = await imgs.nth(i).evaluate((img) => img.complete && img.naturalWidth > 0);
+    // Images are lazy-loaded, so scroll each one in and wait for it to finish loading.
+    const ok = await imgs.nth(i).evaluate(async (img) => {
+      img.scrollIntoView();
+      if (!img.complete) await new Promise((r) => { img.onload = r; img.onerror = r; });
+      return img.naturalWidth > 0;
+    });
     check(ok, `variant screenshot ${i + 1} loaded`);
   }
   await variantCards.first().getByRole("button", { name: "Use this" }).click();
