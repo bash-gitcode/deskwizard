@@ -46,8 +46,10 @@ else
   note "- greetd install exits 0 with stdin closed (exit $rc): FAIL"; fail=1
 fi
 
+# sudo cannot read a process-substitution pipe, so the expected content goes to a real file first.
+printf '%s\n' "$ORIGINAL" > "$WORK/original.toml"
 LATEST="$(find "$HOME/.config-backup" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)"
-if [ -n "$LATEST" ] && sudo cmp -s "$LATEST/system/etc/greetd/config.toml" <(printf '%s\n' "$ORIGINAL"); then
+if [ -n "$LATEST" ] && sudo cmp -s "$LATEST/system/etc/greetd/config.toml" "$WORK/original.toml"; then
   note "- backup holds the original config.toml ($LATEST): PASS"
 else
   note "- backup holds the original config.toml: FAIL"; fail=1
