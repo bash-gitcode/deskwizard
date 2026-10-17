@@ -20,7 +20,7 @@ jobs:
       - name: Install build tools
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends nodejs npm shellcheck ca-certificates
+          apt-get install -y --no-install-recommends nodejs npm shellcheck ca-certificates git
 
       - name: Refuse secret-looking files
         run: node scripts/check-secrets.mjs
@@ -41,6 +41,28 @@ jobs:
               status=1
             else
               echo "ok: $pkg $candidate"
+            fi
+          done
+          exit "$status"
+
+      - name: Packaged versions in Debian 13 (fails if any candidate is missing)
+        run: |
+          status=0
+          {
+            echo "## Packaged versions (debian:trixie)"
+            echo
+            echo "| package | candidate version |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for pkg in sway waybar fuzzel foot mako-notifier swaybg; do
+            candidate="$(apt-cache policy "$pkg" | awk '/Candidate:/ {print $2; exit}')"
+            if [ -z "$candidate" ] || [ "$candidate" = "(none)" ]; then
+              echo "| $pkg | MISSING |" >> "$GITHUB_STEP_SUMMARY"
+              echo "MISSING: $pkg has no candidate in Debian 13"
+              status=1
+            else
+              echo "| $pkg | $candidate |" >> "$GITHUB_STEP_SUMMARY"
+              echo "version: $pkg $candidate"
             fi
           done
           exit "$status"
