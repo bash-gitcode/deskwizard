@@ -35,6 +35,10 @@ check() { # check "description" command...
 # 1. Seed the files the installs touch.
 printf '# original profile\nexport DESKWIZARD_CHECK_KEEP=1\n' > "$HOME/.profile"
 cp "$HOME/.profile" "$WORK/profile.seed"
+# greetd is installed first so dpkg does not stop at its conffile prompt when the seeded file is present
+# (on a machine with a pre-existing config.toml that prompt is a separate, real issue; see the report).
+sudo apt-get update -qq > "$OUT/seed-apt.log" 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq greetd >> "$OUT/seed-apt.log" 2>&1
+check "greetd package installed for the seed step" dpkg -s greetd
 sudo mkdir -p /etc/greetd
 printf '# original greetd config\n' | sudo tee /etc/greetd/config.toml > /dev/null
 cp /etc/greetd/config.toml "$WORK/greetd.seed"
