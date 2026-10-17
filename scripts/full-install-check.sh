@@ -41,6 +41,9 @@ else
 fi
 
 # 2. Config check. `sway -C` parses the file and exits non-zero on any error.
+# sway refuses to start without XDG_RUNTIME_DIR, even for a config check.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$(mktemp -d)}"
+chmod 700 "$XDG_RUNTIME_DIR"
 if [ -s "$SWAY_CFG" ] && sway -C -c "$SWAY_CFG" > "$OUT/sway-check.log" 2>&1; then
   note "- sway -C on $SWAY_CFG: PASS"
 else
@@ -50,8 +53,6 @@ else
 fi
 
 # 3. Headless Sway with the installed config (same backend settings as scripts/smoke-tools.sh).
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$(mktemp -d)}"
-chmod 700 "$XDG_RUNTIME_DIR"
 WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman LIBSEAT_BACKEND=noop \
   sway -V -c "$SWAY_CFG" > "$OUT/sway.log" 2>&1 &
 SWAY_PID=$!
