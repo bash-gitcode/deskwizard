@@ -92,6 +92,13 @@ notify-send -t 60000 "deskwizard" "Full install check: notifications work" 2>> "
 # 5. Wait 10 s, then screenshot the whole screen.
 sleep 10
 # The notification must be known to mako, not only sent.
+{
+  echo "== makoctl version / list / history (diagnostics)"
+  echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unset}"
+  makoctl --version 2>&1 || true
+  echo "-- list"; makoctl list 2>&1 || true
+  echo "-- history"; makoctl history 2>&1 || true
+} >> "$OUT/notify.log"
 if makoctl list 2>> "$OUT/notify.log" | grep -q "notifications work"; then
   note "- mako shows the check notification: PASS"
 else
