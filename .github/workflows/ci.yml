@@ -185,6 +185,47 @@ jobs:
           path: full-install-out/
           if-no-files-found: warn
 
+  # Job U: install the tty1 and greetd builds over seeded files, run uninstall.sh as a normal user with
+  # passwordless sudo, and assert the profile block, the home backups and the /etc/greetd restore.
+  uninstall:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node, sudo and python3 (for the TOML check)
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils sudo
+          npm ci
+          npm run build
+
+      - name: Normal user with passwordless sudo; systemctl shim (CI only, no systemd here)
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
+          chmod 440 /etc/sudoers.d/builder
+          printf '%s\n' '#!/bin/sh' 'exit 0' > /usr/local/bin/systemctl
+          chmod 755 /usr/local/bin/systemctl
+          chown -R builder "$GITHUB_WORKSPACE"
+
+      - name: Install, uninstall, assert
+        run: |
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" bash scripts/uninstall-check.sh
+
+      - name: Add the check summary to the job summary
+        if: always()
+        run: |
+          if [ -f uninstall-out/summary.md ]; then cat uninstall-out/summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Upload the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uninstall-logs
+          path: uninstall-out/
+          if-no-files-found: warn
+
   # Job F: every pinned Nerd Font archive matches its catalog sha256, and the installer falls back
   # to fonts-font-awesome when the download fails.
   font-check:
