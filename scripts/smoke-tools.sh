@@ -18,8 +18,9 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${OUT:-$ROOT/smoke-out}"
 RUN_SECONDS="${RUN_SECONDS:-5}"
-# Error lines: Waybar/Sway/GTK style "[error]", "error:", "failed to", "fatal", crashes.
-ERR_RE='\[error\]|error:|failed to|fatal|panic|segmentation fault'
+# Error lines: "[error]" (waybar), "err: " (fuzzel), "error: " with a space (the space keeps D-Bus names like
+# "GDBus.Error:org..." from matching), "failed to", "fatal", crashes.
+ERR_RE='\[error\]|\berr: |\berror: |failed to|fatal|panic|segmentation fault'
 # Ignored error lines. Each one is expected in a container and is logged in the summary, never hidden.
 #   - no /dev/rfkill (waybar wifi module)
 #   - GTK's AT-SPI accessibility bus (no a11y bus in a container)
@@ -31,7 +32,7 @@ for cmd in sway swaymsg grim node waybar foot fuzzel mako swaybg pgrep pkill; do
 done
 
 rm -rf "$OUT"
-mkdir -p "$OUT"
+mkdir -p "$OUT" "$HOME/.cache"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$(mktemp -d)}"
 chmod 700 "$XDG_RUNTIME_DIR"
 
