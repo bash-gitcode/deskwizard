@@ -50,6 +50,9 @@ for s in "$XDG_RUNTIME_DIR"/wayland-*; do
 done
 wl_name="${WL_SOCK##*/}"
 export WAYLAND_DISPLAY="$wl_name"
+# GTK (waybar) must use Wayland here, not fall back to X11.
+export GDK_BACKEND=wayland
+echo "smoke-waybar: WAYLAND_DISPLAY=$WAYLAND_DISPLAY SWAYSOCK=$SWAYSOCK" >> "$OUT/sway.log"
 
 # Wait up to 30 s for the IPC socket to answer.
 ready=false
