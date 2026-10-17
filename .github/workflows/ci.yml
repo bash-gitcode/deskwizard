@@ -72,6 +72,7 @@ jobs:
           shellcheck -x site/public/v1/install.sh
           shellcheck -x site/public/v1/uninstall.sh
           shellcheck -x scripts/smoke-tools.sh
+          shellcheck -x scripts/smoke-repeat.sh
 
   # Job H4: the installer's dry run for the default build, in debian:trixie. The full output goes to
   # the job summary. The test base URL is a file:// copy of the build, so the dry run uses this commit.

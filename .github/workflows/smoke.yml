@@ -5,6 +5,25 @@ name: tool-smoke
 # for 5 s, and is screenshotted. Screenshots and logs are uploaded as the "tool-smoke" artifact.
 on:
   workflow_call:
+    inputs:
+      only:
+        description: "Regex on the variant label (e.g. ^fuzzel-). Empty runs every variant."
+        type: string
+        default: ""
+      repeat:
+        description: "How many times to run the smoke test."
+        type: string
+        default: "1"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Regex on the variant label (e.g. ^fuzzel-). Empty runs every variant."
+        type: string
+        default: ""
+      repeat:
+        description: "How many times to run the smoke test."
+        type: string
+        default: "1"
 
 permissions:
   contents: read
@@ -61,10 +80,13 @@ jobs:
           fc-cache -f /home/builder/.local/share/fonts
 
       - name: Smoke test every variant of the five tools on headless Sway
+        env:
+          ONLY: ${{ inputs.only }}
+          REPEAT: ${{ inputs.repeat }}
         run: |
           # Tools need a session D-Bus; dbus-run-session provides one for sway and the tools.
-          runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
-            dbus-run-session -- bash -c "cd '$GITHUB_WORKSPACE' && OUT='$GITHUB_WORKSPACE/smoke-out' bash scripts/smoke-tools.sh"
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" ONLY="$ONLY" REPEAT="$REPEAT" \
+            dbus-run-session -- bash -c "cd '$GITHUB_WORKSPACE' && OUT='$GITHUB_WORKSPACE/smoke-out' bash scripts/smoke-repeat.sh"
 
       - name: Add the smoke summary to the job summary
         if: always()

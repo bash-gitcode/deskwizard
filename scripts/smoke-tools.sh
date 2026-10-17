@@ -108,6 +108,8 @@ mapfile -t VARIANTS < <(node "$ROOT/scripts/smoke-stage.mjs" list)
 for entry in "${VARIANTS[@]}"; do
   read -r tool variant <<< "$entry"
   label="$tool-$variant"
+  # ONLY (regex on the label, e.g. ^fuzzel-) limits the run to matching variants.
+  if [ -n "${ONLY:-}" ] && ! [[ "$label" =~ $ONLY ]]; then continue; fi
   log="$OUT/$label.log"
   stage="$OUT/stage/$label"
 
@@ -141,6 +143,12 @@ for entry in "${VARIANTS[@]}"; do
 
   if [ "$status" = PASS ]; then
     grim "$OUT/$label.png" || { status="FAIL"; notes="${notes:+$notes; }grim could not take a screenshot"; }
+  fi
+
+  # On failure keep what a diagnosis needs: the runtime dir listing and the end of the sway log.
+  if [ "$status" = FAIL ]; then
+    ls -la "$XDG_RUNTIME_DIR" > "$OUT/$label.runtime-ls.txt" 2>&1
+    tail -n 80 "$OUT/sway.log" > "$OUT/$label.sway-tail.txt"
   fi
 
   grep -i 'warn' "$log" > "$OUT/$label.warnings" || true
