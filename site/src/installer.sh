@@ -67,6 +67,8 @@ backup_existing() {
     printf '[dry-run] back up %s to %s\n' "$target" "$dest"
     return 0
   fi
+  # Create the backup folder as the user. If sudo created it, a later install run as the user could not write to it.
+  mkdir -p "$BACKUP_DIR"
   if [[ "$target" == "$HOME"/* ]]; then
     mkdir -p "$(dirname "$dest")"
     cp -a "$target" "$dest"
