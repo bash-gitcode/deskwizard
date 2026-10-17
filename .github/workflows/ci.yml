@@ -199,8 +199,14 @@ jobs:
       - name: Check the pinned Nerd Font sha256 values (downloads from github.com)
         run: node scripts/check-fonts.mjs
 
+      - name: Normal user for the font test (the installer refuses root)
+        run: |
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+
       - name: Test the font-awesome fallback when the download fails
-        run: bash scripts/test-font-fallback.sh
+        run: |
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" bash scripts/test-font-fallback.sh
 
   # Job G: each start method writes what it promises, in debian:trixie. Real login is not tested here:
   # systemd is not running in the container, so a test-only systemctl shim records the enable call.

@@ -52,7 +52,15 @@ if (cmd === "packages") {
         palette: "midnight",
         start,
         extras: [],
-        choices: { sway: { variant: null }, waybar: { variant: "minimal" } },
+        // The tools the full-install check needs: waybar, mako, swaybg and foot, plus fuzzel.
+        choices: {
+          sway: { variant: null },
+          waybar: { variant: "minimal" },
+          mako: { variant: "corner" },
+          swaybg: { variant: "dusk" },
+          foot: { variant: "classic" },
+          fuzzel: { variant: "classic" },
+        },
       },
       catalog.catalog_version,
     ),
