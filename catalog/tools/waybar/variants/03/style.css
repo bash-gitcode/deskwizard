@@ -1,0 +1,66 @@
+/* deskwizard variant 03: powerline.
+ * Palette colors are @define-color names (GTK CSS has no var()).
+ * Only the lines below may contain color literals. */
+@define-color bg #1b1d2b;
+@define-color fg #e0def4;
+@define-color accent #31748f;
+@define-color warn #f6c177;
+@define-color crit #eb6f92;
+
+* {
+  font-family: "{{NERD_FONT}}", "FontAwesome", sans-serif;
+  font-size: 13px;
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+}
+
+window#waybar {
+  background: @bg;
+  color: @fg;
+}
+
+#workspaces button {
+  padding: 0 10px;
+  color: @fg;
+  background: @accent;
+}
+
+#workspaces button.focused {
+  background: @fg;
+  color: @bg;
+}
+
+#workspaces button.urgent {
+  background: @crit;
+  color: @bg;
+}
+
+#mode,
+#window,
+#cpu,
+#memory,
+#network,
+#pulseaudio,
+#battery,
+#clock,
+#tray {
+  padding: 0 10px;
+  color: @fg;
+  background: @accent;
+}
+
+#clock {
+  background: @fg;
+  color: @bg;
+}
+
+#battery.warning {
+  background: @warn;
+  color: @bg;
+}
+
+#battery.critical {
+  background: @crit;
+  color: @bg;
+}

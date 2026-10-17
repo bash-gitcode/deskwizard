@@ -1,0 +1,18 @@
+id: minimal
+name: Minimal
+good_for:
+  - Low distraction
+  - Small screens
+  - Keyboard-first use
+palette:
+  bg: "#1e1e2e"
+  fg: "#cdd6f4"
+  accent: "#89b4fa"
+  warn: "#f9e2af"
+  crit: "#f38ba8"
+requires:
+  - sway
+options:
+  height: 28
+  position: top
+screenshot: screenshot.svg

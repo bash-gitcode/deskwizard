@@ -1,0 +1,32 @@
+// Waybar config: minimal (deskwizard variant 01).
+// Top bar, flat, few modules. Colors live in style.css.
+{
+  "layer": "top",
+  "position": "top",
+  "height": 28,
+  "spacing": 8,
+  "modules-left": ["sway/workspaces", "sway/mode"],
+  "modules-center": ["clock"],
+  "modules-right": ["network", "pulseaudio", "battery", "tray"],
+
+  "clock": {
+    "format": "{:%a %d %b  %H:%M}",
+    "tooltip-format": "{:%Y-%m-%d}"
+  },
+  "network": {
+    "format-wifi": "wifi {signalStrength}%",
+    "format-ethernet": "eth",
+    "format-disconnected": "offline"
+  },
+  "pulseaudio": {
+    "format": "vol {volume}%",
+    "format-muted": "muted"
+  },
+  "battery": {
+    "format": "bat {capacity}%",
+    "states": { "warning": 30, "critical": 15 }
+  },
+  "tray": {
+    "spacing": 8
+  }
+}

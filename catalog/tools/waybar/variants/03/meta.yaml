@@ -1,0 +1,18 @@
+id: powerline
+name: Powerline
+good_for:
+  - Dense information
+  - Fans of segmented, arrow-like bars
+  - Dark terminal-style setups
+palette:
+  bg: "#1b1d2b"
+  fg: "#e0def4"
+  accent: "#31748f"
+  warn: "#f6c177"
+  crit: "#eb6f92"
+requires:
+  - sway
+options:
+  height: 30
+  position: top
+screenshot: screenshot.svg

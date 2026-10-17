@@ -1,0 +1,43 @@
+// Waybar config: powerline (deskwizard variant 03).
+// Top bar; modules form colored segments. Colors live in style.css.
+{
+  "layer": "top",
+  "position": "top",
+  "height": 30,
+  "spacing": 0,
+  "modules-left": ["sway/workspaces", "sway/mode"],
+  "modules-center": ["sway/window"],
+  "modules-right": ["cpu", "memory", "network", "pulseaudio", "battery", "clock", "tray"],
+
+  "sway/window": {
+    "max-length": 50
+  },
+  "cpu": {
+    "format": "cpu {usage}%",
+    "interval": 5
+  },
+  "memory": {
+    "format": "mem {percentage}%",
+    "interval": 10
+  },
+  "clock": {
+    "format": "{:%H:%M  %d %b}",
+    "tooltip-format": "{:%A %d %B %Y}"
+  },
+  "network": {
+    "format-wifi": "wifi {signalStrength}%",
+    "format-ethernet": "eth",
+    "format-disconnected": "offline"
+  },
+  "pulseaudio": {
+    "format": "vol {volume}%",
+    "format-muted": "muted"
+  },
+  "battery": {
+    "format": "bat {capacity}%",
+    "states": { "warning": 30, "critical": 15 }
+  },
+  "tray": {
+    "spacing": 8
+  }
+}

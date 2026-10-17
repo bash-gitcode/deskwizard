@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "variant.schema.json",
+  "title": "Variant meta",
+  "type": "object",
+  "required": ["id", "name", "good_for", "palette", "requires", "options", "screenshot"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "good_for": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 3 } },
+    "palette": {
+      "type": "object",
+      "required": ["bg", "fg", "accent", "warn", "crit"],
+      "additionalProperties": false,
+      "properties": {
+        "bg": { "$ref": "#/$defs/hex" },
+        "fg": { "$ref": "#/$defs/hex" },
+        "accent": { "$ref": "#/$defs/hex" },
+        "warn": { "$ref": "#/$defs/hex" },
+        "crit": { "$ref": "#/$defs/hex" }
+      }
+    },
+    "requires": { "type": "array", "items": { "type": "string" } },
+    "options": {
+      "type": "object",
+      "required": ["height", "position"],
+      "additionalProperties": false,
+      "properties": {
+        "height": { "type": "integer", "minimum": 16, "maximum": 96 },
+        "position": { "enum": ["top", "bottom"] }
+      }
+    },
+    "screenshot": { "type": "string", "pattern": "^[A-Za-z0-9._/-]+\\.(svg|png|webp)$" }
+  },
+  "$defs": {
+    "hex": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+  }
+}

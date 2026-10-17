@@ -1,0 +1,62 @@
+/* deskwizard variant 04: glass.
+ * Palette colors are @define-color names (GTK CSS has no var()).
+ * Only the lines below may contain color literals. */
+@define-color bg #263238;
+@define-color fg #eceff1;
+@define-color accent #80cbc4;
+@define-color warn #ffe082;
+@define-color crit #ef9a9a;
+
+/* Translucent variants of the palette, used by the glass look. */
+@define-color glass_bar rgba(38, 50, 56, 0.55);
+@define-color glass_line rgba(236, 239, 241, 0.15);
+@define-color glass_focus rgba(128, 203, 196, 0.18);
+@define-color glass_pill rgba(236, 239, 241, 0.08);
+
+* {
+  font-family: "{{NERD_FONT}}", "FontAwesome", sans-serif;
+  font-size: 13px;
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+}
+
+window#waybar {
+  background: @glass_bar;
+  color: @fg;
+  border-bottom: 1px solid @glass_line;
+}
+
+#workspaces button {
+  padding: 0 8px;
+  color: @fg;
+  background: transparent;
+}
+
+#workspaces button.focused {
+  color: @accent;
+  background: @glass_focus;
+}
+
+#workspaces button.urgent {
+  color: @crit;
+}
+
+#clock,
+#network,
+#pulseaudio,
+#battery,
+#tray {
+  padding: 0 10px;
+  margin: 3px 2px;
+  border-radius: 8px;
+  background: @glass_pill;
+}
+
+#battery.warning {
+  color: @warn;
+}
+
+#battery.critical {
+  color: @crit;
+}

@@ -1,0 +1,22 @@
+id: sway
+name: Sway
+type: compositor
+description: Tiling Wayland compositor. Windows are tiled automatically and driven from the keyboard. Config is compatible with i3 syntax.
+needed: required
+needed_reason: The Waybar bar and this setup both run on Sway. Without a compositor there is no desktop.
+display:
+  order: 1
+works_with:
+  - waybar
+requires: []
+packages:
+  debian13:
+    - sway
+    - swaylock
+difficulty: medium
+ram_mb: 150
+default_variant: null
+install:
+  - target: "~/.config/sway/config"
+    from: tool
+    source: sway.conf

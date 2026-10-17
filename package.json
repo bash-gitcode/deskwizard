@@ -1,0 +1,25 @@
+{
+  "name": "deskwizard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Build a Debian 13 + Sway + Waybar desktop setup and export a one-line install command.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "build-catalog": "node scripts/build-catalog.mjs",
+    "generate-install": "node scripts/generate-install.mjs",
+    "dev": "vite --config vite.config.js",
+    "build": "node scripts/validate.mjs && node scripts/build-catalog.mjs && node scripts/generate-install.mjs && vite build --config vite.config.js"
+  },
+  "dependencies": {
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "vite": "^5.4.0"
+  }
+}

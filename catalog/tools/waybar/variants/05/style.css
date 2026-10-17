@@ -1,0 +1,60 @@
+/* deskwizard variant 05: dock-like.
+ * Palette colors are @define-color names (GTK CSS has no var()).
+ * Only the lines below may contain color literals. */
+@define-color bg #2e3440;
+@define-color fg #eceff4;
+@define-color accent #88c0d0;
+@define-color warn #ebcb8b;
+@define-color crit #bf616a;
+
+* {
+  font-family: "{{NERD_FONT}}", "FontAwesome", sans-serif;
+  font-size: 14px;
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+}
+
+window#waybar {
+  background: @bg;
+  color: @fg;
+  border-top: 2px solid @accent;
+}
+
+#workspaces {
+  padding: 0 6px;
+}
+
+#workspaces button {
+  padding: 0 14px;
+  margin: 4px 3px;
+  border-radius: 10px;
+  color: @fg;
+  background: transparent;
+}
+
+#workspaces button.focused {
+  background: @accent;
+  color: @bg;
+}
+
+#workspaces button.urgent {
+  background: @crit;
+  color: @bg;
+}
+
+#network,
+#pulseaudio,
+#battery,
+#clock,
+#tray {
+  padding: 0 10px;
+}
+
+#battery.warning {
+  color: @warn;
+}
+
+#battery.critical {
+  color: @crit;
+}

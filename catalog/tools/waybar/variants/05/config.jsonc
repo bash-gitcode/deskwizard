@@ -1,0 +1,36 @@
+// Waybar config: dock-like (deskwizard variant 05).
+// Bottom bar; workspaces centered like a dock. Colors live in style.css.
+{
+  "layer": "top",
+  "position": "bottom",
+  "height": 40,
+  "spacing": 12,
+  "modules-left": [],
+  "modules-center": ["sway/workspaces"],
+  "modules-right": ["network", "pulseaudio", "battery", "clock", "tray"],
+
+  "sway/workspaces": {
+    "format": "{name}",
+    "all-outputs": false
+  },
+  "clock": {
+    "format": "{:%H:%M}",
+    "tooltip-format": "{:%A %d %B %Y}"
+  },
+  "network": {
+    "format-wifi": "wifi {signalStrength}%",
+    "format-ethernet": "eth",
+    "format-disconnected": "offline"
+  },
+  "pulseaudio": {
+    "format": "vol {volume}%",
+    "format-muted": "muted"
+  },
+  "battery": {
+    "format": "bat {capacity}%",
+    "states": { "warning": 30, "critical": 15 }
+  },
+  "tray": {
+    "spacing": 12
+  }
+}

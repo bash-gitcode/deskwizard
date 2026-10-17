@@ -1,0 +1,26 @@
+id: waybar
+name: Waybar
+type: bar
+description: Status bar for Sway showing workspaces, window title, clock, network, volume, battery and tray. Five looks to choose from.
+needed: recommended
+needed_reason: Sway runs without a bar, but you lose workspace and status information at a glance.
+display:
+  order: 2
+works_with:
+  - sway
+requires:
+  - sway
+packages:
+  debian13:
+    - waybar
+    - fonts-font-awesome
+difficulty: easy
+ram_mb: 40
+default_variant: minimal
+install:
+  - target: "~/.config/waybar/config.jsonc"
+    from: variant
+    source: config.jsonc
+  - target: "~/.config/waybar/style.css"
+    from: variant
+    source: style.css

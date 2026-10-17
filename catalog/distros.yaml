@@ -1,0 +1,10 @@
+# Distros shown in wizard step 1. Only debian13 is available in Phase 1.
+- id: debian13
+  name: Debian 13 "trixie"
+  status: available
+  os_release:
+    ID: debian
+    VERSION_ID: "13"
+- id: other
+  name: Other distributions
+  status: coming_soon

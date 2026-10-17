@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tool.schema.json",
+  "title": "Tool",
+  "type": "object",
+  "required": [
+    "id", "name", "type", "description", "needed", "needed_reason", "display",
+    "works_with", "requires", "packages", "difficulty", "ram_mb", "default_variant"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "type": { "enum": ["compositor", "bar"] },
+    "description": { "type": "string", "minLength": 10 },
+    "needed": { "enum": ["required", "recommended", "optional"] },
+    "needed_reason": { "type": "string", "minLength": 5 },
+    "display": {
+      "type": "object",
+      "required": ["order"],
+      "additionalProperties": false,
+      "properties": { "order": { "type": "integer", "minimum": 1 } }
+    },
+    "works_with": { "type": "array", "items": { "type": "string" } },
+    "requires": { "type": "array", "items": { "type": "string" } },
+    "packages": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z]+[0-9]*$": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.+-]*$" }
+        }
+      }
+    },
+    "difficulty": { "enum": ["easy", "medium", "hard"] },
+    "ram_mb": { "type": "integer", "minimum": 0 },
+    "default_variant": { "type": ["string", "null"] },
+    "install": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["target", "from", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "target": { "type": "string", "pattern": "^~/" },
+          "from": { "enum": ["tool", "variant"] },
+          "source": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

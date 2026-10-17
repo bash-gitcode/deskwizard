@@ -1,0 +1,59 @@
+/* deskwizard variant 02: pills.
+ * Palette colors are @define-color names (GTK CSS has no var()).
+ * Only the lines below may contain color literals. */
+@define-color bg #282a36;
+@define-color fg #f8f8f2;
+@define-color accent #bd93f9;
+@define-color warn #f1fa8c;
+@define-color crit #ff5555;
+
+* {
+  font-family: "{{NERD_FONT}}", "FontAwesome", sans-serif;
+  font-size: 13px;
+  border: none;
+  min-height: 0;
+}
+
+window#waybar {
+  background: transparent;
+  color: @fg;
+}
+
+#workspaces,
+#window,
+#clock,
+#network,
+#pulseaudio,
+#battery,
+#tray {
+  background: @bg;
+  color: @fg;
+  border-radius: 14px;
+  padding: 0 12px;
+  margin: 4px 2px;
+}
+
+#workspaces button {
+  padding: 0 6px;
+  color: @fg;
+  border-radius: 14px;
+  background: transparent;
+}
+
+#workspaces button.focused {
+  background: @accent;
+  color: @bg;
+}
+
+#workspaces button.urgent {
+  background: @crit;
+  color: @bg;
+}
+
+#battery.warning {
+  color: @warn;
+}
+
+#battery.critical {
+  color: @crit;
+}

@@ -1,0 +1,35 @@
+// Waybar config: pills (deskwizard variant 02).
+// Top bar; each module is a rounded pill. Colors live in style.css.
+{
+  "layer": "top",
+  "position": "top",
+  "height": 32,
+  "spacing": 6,
+  "modules-left": ["sway/workspaces", "sway/window"],
+  "modules-center": ["clock"],
+  "modules-right": ["network", "pulseaudio", "battery", "tray"],
+
+  "sway/window": {
+    "max-length": 40
+  },
+  "clock": {
+    "format": "{:%H:%M  %a %d}",
+    "tooltip-format": "{:%A %d %B %Y}"
+  },
+  "network": {
+    "format-wifi": "wifi {signalStrength}%",
+    "format-ethernet": "eth",
+    "format-disconnected": "offline"
+  },
+  "pulseaudio": {
+    "format": "vol {volume}%",
+    "format-muted": "muted"
+  },
+  "battery": {
+    "format": "bat {capacity}%",
+    "states": { "warning": 30, "critical": 15 }
+  },
+  "tray": {
+    "spacing": 6
+  }
+}

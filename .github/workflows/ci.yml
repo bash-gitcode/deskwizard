@@ -1,0 +1,133 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Job A: every apt package the catalog needs exists in Debian 13, the dry run works, shellcheck passes.
+  package-check:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm shellcheck ca-certificates
+
+      - name: Build the site and installer
+        run: |
+          npm ci
+          npm run build
+
+      - name: apt-cache policy for every catalog package (fails on any missing candidate)
+        run: |
+          apt-get update
+          status=0
+          for pkg in $(node scripts/ci-helpers.mjs packages); do
+            candidate="$(apt-cache policy "$pkg" | awk '/Candidate:/ {print $2; exit}')"
+            if [ -z "$candidate" ] || [ "$candidate" = "(none)" ]; then
+              echo "MISSING: $pkg has no candidate in Debian 13"
+              status=1
+            else
+              echo "ok: $pkg $candidate"
+            fi
+          done
+          exit "$status"
+
+      - name: Dry run of the generated installer (as a normal user; the installer refuses root)
+        run: |
+          useradd -m builder
+          cp -r . /tmp/deskwizard
+          chown -R builder /tmp/deskwizard
+          runuser -u builder -- bash /tmp/deskwizard/site/public/v1/install.sh --dry-run
+
+      - name: shellcheck -x on the generated installer and the smoke script
+        run: |
+          shellcheck -x site/public/v1/install.sh
+          shellcheck -x scripts/smoke-waybar.sh
+
+  # Job B: each Waybar variant starts under headless Sway, stays up for 5 s, and is screenshotted.
+  waybar-variants:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Sway, Waybar and the pinned fonts
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            nodejs npm ca-certificates curl xz-utils procps \
+            sway waybar grim fonts-font-awesome fontconfig
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+
+      - name: Build the catalog
+        run: |
+          npm ci
+          node scripts/validate.mjs
+          node scripts/build-catalog.mjs
+
+      - name: Install the pinned default Nerd Font (checksum must match)
+        run: |
+          eval "$(node scripts/ci-helpers.mjs font)"
+          url="https://github.com/ryanoasis/nerd-fonts/releases/download/${NERD_FONT_VERSION}/${NERD_FONT_ARCHIVE}"
+          curl -fsSL -o "/tmp/${NERD_FONT_ARCHIVE}" "$url"
+          echo "${NERD_FONT_SHA256}  /tmp/${NERD_FONT_ARCHIVE}" | sha256sum -c -
+          dest="/home/builder/.local/share/fonts/NerdFonts/${NERD_FONT_DEST}"
+          runuser -u builder -- mkdir -p "$dest"
+          runuser -u builder -- tar -xJf "/tmp/${NERD_FONT_ARCHIVE}" -C "$dest"
+          fc-cache -f /home/builder/.local/share/fonts
+
+      - name: Smoke test every Waybar variant on headless Sway
+        run: |
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
+            bash -c "cd '$GITHUB_WORKSPACE' && OUT='$GITHUB_WORKSPACE/smoke-out' bash scripts/smoke-waybar.sh"
+
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: waybar-smoke
+          path: smoke-out/
+          if-no-files-found: warn
+
+  # Job C: click through the wizard in headless Chromium and save a screenshot per step.
+  wizard-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Build the site
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install Playwright (CI only, not a repo dependency) and Chromium
+        run: |
+          npm i --no-save playwright@1.48.2
+          npx playwright install --with-deps chromium
+
+      - name: Run the wizard click-through
+        run: node tests/e2e/wizard.e2e.mjs
+
+      - name: Upload step screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizard-e2e-screenshots
+          path: e2e-shots/
+          if-no-files-found: warn
