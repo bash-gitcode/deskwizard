@@ -91,6 +91,18 @@ launch() {
   esac
 }
 
+# Every client waits for a live compositor before it starts: the Wayland socket exists, an output is
+# active, and swaymsg answers. Without this a client can connect while sway is still setting up.
+wait_for_sway() {
+  for _ in $(seq 1 20); do
+    if [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && swaymsg -t get_outputs 2>/dev/null | grep -Eq '"active": ?true'; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 summary="$OUT/summary.md"
 {
   echo "## Tool smoke test (headless Sway, 1920x1080, ${RUN_SECONDS} s per variant)"
@@ -120,6 +132,11 @@ for entry in "${VARIANTS[@]}"; do
   fi
   cp -r "$stage"/. "$HOME"/
 
+  if ! wait_for_sway; then
+    echo "| $label | FAIL | - | - | sway not ready before launch |" >> "$summary"
+    failed=$((failed + 1))
+    continue
+  fi
   launch "$tool" > "$log" 2>&1 &
   pid=$!
   sleep "$RUN_SECONDS"
