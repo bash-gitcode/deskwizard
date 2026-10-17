@@ -34,6 +34,8 @@ jobs:
         with:
           name: tool-smoke
           path: smoke-out
+      # Wallpaper PNGs are gitignored; render them from the committed SVGs before the catalog reads them.
+      - run: npm run -s render-wallpapers
       # The copy step reads the variant list from the catalog, so build it first.
       - run: npm run -s build-catalog
       # Fails if any variant's screenshot is missing.
