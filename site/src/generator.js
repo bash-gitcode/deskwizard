@@ -20,7 +20,7 @@ export const SCHEMA_VERSION = 3;
 export const DEFAULT_PALETTE = "midnight";
 export const NERD_FONT_TOKEN = "{{NERD_FONT}}";
 // Packages every bar build adds on top of the bar's own list. Also used by scripts/list-packages.mjs.
-export const BAR_EXTRA_PACKAGES = ["fontconfig", "curl"];
+export const BAR_EXTRA_PACKAGES = ["fontconfig", "curl", "xz-utils"];
 // Largest base64 string that fits in one command-line argument (Linux MAX_ARG_STRLEN is 128 KiB).
 export const MAX_ONE_LINE_BASE64 = 120000;
 // Palette tokens in variant files: $bg, $accent2, $font_mono, and color forms $bg_hex (no #) and $bg_hexff (RRGGBBff).
@@ -179,7 +179,8 @@ export function buildPlan(state, catalog) {
   const downloadFont = bars.length > 0 && Boolean(font) && font.archive !== null;
   if (bars.length > 0) {
     for (const pkg of BAR_EXTRA_PACKAGES) {
-      if (pkg === "curl" && !downloadFont) continue;
+      // curl and xz-utils are only needed to download and unpack the Nerd Font archive.
+      if ((pkg === "curl" || pkg === "xz-utils") && !downloadFont) continue;
       if (!packages.includes(pkg)) packages.push(pkg);
     }
   }
