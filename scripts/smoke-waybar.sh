@@ -100,8 +100,9 @@ for vdir in "$VARIANTS"/*/; do
     status="FAIL"
     reasons="waybar exited within ${RUN_SECONDS}s"
   fi
-  # Match Waybar's own error lines. GTK's AT-SPI "Error retrieving accessibility bus" message is harmless here.
-  if grep -iE '\[error\]|failed to|fatal' "$log" > "$OUT/$label.errors" 2>/dev/null && [ -s "$OUT/$label.errors" ]; then
+  # Match Waybar's own error lines. Two messages are expected in a container and are ignored:
+  # no /dev/rfkill (wifi module) and GTK's AT-SPI accessibility bus. Every other error fails the variant.
+  if grep -iE '\[error\]|failed to|fatal' "$log" | grep -viE "Can't open RFKILL control device|AT-SPI" > "$OUT/$label.errors" 2>/dev/null && [ -s "$OUT/$label.errors" ]; then
     status="FAIL"
     reasons="${reasons:+$reasons; }error lines in log"
   fi
