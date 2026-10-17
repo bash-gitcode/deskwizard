@@ -32,6 +32,23 @@ jobs:
           useradd -m builder
           chown -R builder "$GITHUB_WORKSPACE"
 
+      - name: Confirm the empty-window selector from the installed Waybar man page
+        run: |
+          # Read the man pages that ship with the packaged Waybar, not a guess. Fails if the page
+          # does not describe an empty state for sway/window, so the CSS cannot rely on a guess.
+          apt-get install -y --no-install-recommends man-db groff-base >/dev/null
+          man_dir=/usr/share/man
+          page="$(ls "$man_dir"/man5/waybar-sway-window.5* 2>/dev/null | head -n1)"
+          [ -n "$page" ] || { echo "no waybar-sway-window man page in the installed package"; exit 1; }
+          text="$(man -P cat -l "$page")"
+          {
+            echo "## Waybar sway/window man page (installed in debian:trixie)"
+            echo '```'
+            printf '%s\n' "$text" | grep -inE 'empty|format|class|sway/window' | head -n 40
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
+          printf '%s\n' "$text" | grep -inE 'empty' || { echo "the man page does not describe an empty state"; exit 1; }
+
       - name: Install the pinned default Nerd Font (checksum must match)
         run: |
           eval "$(node scripts/ci-helpers.mjs font)"
