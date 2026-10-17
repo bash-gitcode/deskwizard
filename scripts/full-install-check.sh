@@ -140,10 +140,19 @@ for tool in waybar mako swaybg foot; do
     fail=1
   fi
 done
-if [ -s "$OUT/full-install.png" ]; then
-  note "- screenshot full-install.png: PASS"
+# The PNG header (IHDR) holds width and height as 4-byte big-endian numbers at offsets 16 and 20.
+# Fail unless the screenshot is exactly 1920x1080.
+if [ -s "$OUT/full-install.png" ] && [ "$(head -c 8 "$OUT/full-install.png" | od -An -tx1 | tr -d ' \n')" = 89504e470d0a1a0a ]; then
+  w=$(od -An -t u1 -j 16 -N 4 "$OUT/full-install.png" | awk '{print $1*16777216+$2*65536+$3*256+$4}')
+  h=$(od -An -t u1 -j 20 -N 4 "$OUT/full-install.png" | awk '{print $1*16777216+$2*65536+$3*256+$4}')
+  if [ "$w" = 1920 ] && [ "$h" = 1080 ]; then
+    note "- screenshot full-install.png is 1920x1080: PASS"
+  else
+    note "- screenshot full-install.png is ${w}x${h}, expected 1920x1080: FAIL"
+    fail=1
+  fi
 else
-  note "- screenshot full-install.png: FAIL"
+  note "- screenshot full-install.png: FAIL (missing or not a PNG)"
   fail=1
 fi
 
