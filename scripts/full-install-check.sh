@@ -84,6 +84,8 @@ export WAYLAND_DISPLAY="${WL_SOCK##*/}" GDK_BACKEND=wayland
 
 # 4. The config autostarts the bar, notifications and wallpaper. Add a notification and a terminal.
 # Float the terminal so the wallpaper and bar stay visible around it.
+# Screenshot size: 1920x1080 (the headless output defaults to a smaller mode).
+swaymsg 'output * mode 1920x1080' >/dev/null
 swaymsg 'for_window [app_id="foot"] floating enable, resize set width 900 px height 500 px, move position center' >/dev/null
 swaymsg exec foot >/dev/null
 # -t 60000: a mako variant may expire notifications after 3-6 s, before the screenshot.

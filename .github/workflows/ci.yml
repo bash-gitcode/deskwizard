@@ -151,6 +151,27 @@ jobs:
           path: full-install-out/
           if-no-files-found: warn
 
+  # Job F: every pinned Nerd Font archive matches its catalog sha256, and the installer falls back
+  # to fonts-font-awesome when the download fails.
+  font-check:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node and build the site and installer
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates
+          npm ci
+          npm run build
+
+      - name: Check the pinned Nerd Font sha256 values (downloads from github.com)
+        run: node scripts/check-fonts.mjs
+
+      - name: Test the font-awesome fallback when the download fails
+        run: bash scripts/test-font-fallback.sh
+
   # Job C: click through the wizard in headless Chromium and save a screenshot per step.
   wizard-e2e:
     needs: changes
