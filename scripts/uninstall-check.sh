@@ -44,10 +44,14 @@ printf '# original greetd config\n' | sudo tee /etc/greetd/config.toml > /dev/nu
 cp /etc/greetd/config.toml "$WORK/greetd.seed"
 
 install_build() { # install_build METHOD LOG
-  local code
-  code="$(node "$ROOT/scripts/ci-helpers.mjs" code "$1")" || return 1
+  local code rc
+  code="$(node "$ROOT/scripts/ci-helpers.mjs" code "$1")" || { echo "install_build $1: code generation failed"; return 1; }
+  echo "install_build $1: code ${#code} chars, base $V1"
   DESKWIZARD_TEST_MODE=1 DESKWIZARD_TEST_BASE_URL="file://$V1" \
     bash "$V1/install.sh" --build "$code" > "$OUT/$2" 2>&1
+  rc=$?
+  echo "install_build $1: exit $rc, log $(wc -c < "$OUT/$2" 2>/dev/null || echo missing) bytes"
+  return "$rc"
 }
 
 # 2. tty1 build, then 3. greetd build. The sleep keeps the two backup folder names apart.
