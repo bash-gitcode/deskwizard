@@ -103,8 +103,21 @@ async function main() {
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Save build (.yaml)" }).click()]);
   const saved = join(SHOTS, "saved-build.yaml");
   await download.saveAs(saved);
+  // Load is on the Review step, so start over and rebuild a different choice (Font Awesome only), then load.
   await page.getByRole("button", { name: "Start over" }).click();
   await page.getByRole("heading", { name: "Distro" }).waitFor();
+  await page.getByRole("button", { name: "Use this" }).first().click();
+  await next();
+  await page.getByRole("radio", { name: /Wayland/ }).check();
+  await next();
+  await page.getByRole("button", { name: "Use this" }).first().click();
+  await next();
+  await page.getByRole("radio", { name: /Font Awesome only/ }).check();
+  await next();
+  await page.getByRole("button", { name: "Use this" }).first().click();
+  await next();
+  await page.getByRole("heading", { name: "Review" }).waitFor();
+  check((await page.getByRole("textbox", { name: "Install command" }).inputValue()) !== oneLiner, "rebuilt build differs before Load");
   await page.locator("#load-build").setInputFiles(saved);
   await page.getByRole("heading", { name: "Review" }).waitFor();
   const reloaded = await page.getByRole("textbox", { name: "Install command" }).inputValue();
