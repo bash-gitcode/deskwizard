@@ -280,8 +280,8 @@ render_text() {
 }
 
 build_plan() {
-  local t order chosen=() compositors=0 bars=0 terminal_cmd="" bar_cmd="" dl_font=false
-  local owner ex line key cmd label tag tgt binary i n=0
+  local t chosen=() compositors=0 bars=0 terminal_cmd="" bar_cmd="" dl_font=false
+  local owner ex line key cmd label tag tgt binary i
   local req vreq vid
   local font_family font_archive font_sha
   local -a bind_keys=() bind_cmds=() bind_labels=() bind_owners=() autos=() autos_owner=()
@@ -394,7 +394,7 @@ build_plan() {
     while IFS=$'\t' read -r tag from source tgt binary; do
       [ "$tag" = install ] || continue
       case "$tgt" in
-        "~/"*) ;;
+        \~/*) ;;
         *) ERRORS+=("$t writes outside your home folder ($tgt). Refusing to continue.") ;;
       esac
       for i in "${!file_targets[@]}"; do
@@ -457,8 +457,6 @@ build_plan() {
   fi
 
   PLAN_TARGETS=("${file_targets[@]}")
-  PLAN_BINARY=("${file_bins[@]}")
-  PLAN_COUNT="${#file_targets[@]}"
   CHEATSHEET="$CHEAT"
 }
 

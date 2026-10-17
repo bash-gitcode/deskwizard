@@ -84,7 +84,7 @@ jobs:
       - name: Install Node and build the site and installer
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends nodejs npm ca-certificates
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils
           npm ci
           npm run build
 
@@ -147,7 +147,7 @@ jobs:
       - name: Install Node and build the site and installer
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends nodejs npm ca-certificates
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils
           npm ci
           npm run build
 
@@ -192,7 +192,7 @@ jobs:
       - name: Install Node and build the site and installer
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends nodejs npm ca-certificates
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils
           npm ci
           npm run build
 
@@ -217,7 +217,7 @@ jobs:
       - name: Install Node, sudo and python3 (for the TOML check)
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends nodejs npm ca-certificates sudo python3
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils sudo python3
           npm ci
           npm run build
 
@@ -236,6 +236,14 @@ jobs:
           runuser -u builder -- env HOME=/home/builder PATH="$PATH" DESKWIZARD_TEST_MODE=1 \
             DESKWIZARD_TEST_BASE_URL="file://$GITHUB_WORKSPACE/site/public/v1" \
             bash "$GITHUB_WORKSPACE/site/public/v1/install.sh" --build "$CODE" 2>&1 | tee install.log
+
+      - name: Upload the installer log when a start method fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-log-${{ matrix.method }}
+          path: install.log
+          if-no-files-found: warn
 
       - name: Assert what the start method wrote
         run: |
