@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Full-install check (CI job "full-install", debian:trixie, run as a normal user with sudo).
+#
+#   1. run the generated installer for real (not --dry-run)
+#   2. check the generated sway config with `sway -C`
+#   3. start headless Sway on that config, wait 10 s
+#   4. start a notification and a foot window
+#   5. screenshot the whole screen (bar, wallpaper, foot window, notification)
+#   6. fail if any of the desktop programs is not running at the end
+#
+# Outputs go to $OUT (default: ./full-install-out): install.log, sway-check.log, sway.log,
+# full-install.png, summary.md.
+# Usage: bash scripts/full-install-check.sh
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OUT="${OUT:-$ROOT/full-install-out}"
+INSTALLER="$ROOT/site/public/v1/install.sh"
+SWAY_CFG="$HOME/.config/sway/config"
+SUMMARY="$OUT/summary.md"
+
+[ "$(id -u)" -ne 0 ] || { echo "full-install: run as a normal user (the installer refuses root)" >&2; exit 2; }
+[ -s "$INSTALLER" ] || { echo "full-install: $INSTALLER is missing. Run npm run build first." >&2; exit 2; }
+
+rm -rf "$OUT"
+mkdir -p "$OUT" "$HOME/.cache"
+fail=0
+note() { echo "$1" | tee -a "$SUMMARY"; }
+{
+  echo "## Full install check (debian:trixie, real installer, headless Sway)"
+  echo
+} > "$SUMMARY"
+
+# 1. Real install. Nothing is skipped.
+if bash "$INSTALLER" > "$OUT/install.log" 2>&1; then
+  note "- installer: PASS"
+else
+  note "- installer: FAIL (exit $?). Last lines of install.log:"
+  tail -n 30 "$OUT/install.log" | sed 's/^/    /' | tee -a "$SUMMARY"
+  exit 1
+fi
+
+# 2. Config check. `sway -C` parses the file and exits non-zero on any error.
+if [ -s "$SWAY_CFG" ] && sway -C -c "$SWAY_CFG" > "$OUT/sway-check.log" 2>&1; then
+  note "- sway -C on $SWAY_CFG: PASS"
+else
+  note "- sway -C on $SWAY_CFG: FAIL"
+  cat "$OUT/sway-check.log" 2>/dev/null | sed 's/^/    /' | tee -a "$SUMMARY"
+  exit 1
+fi
+
+# 3. Headless Sway with the installed config (same backend settings as scripts/smoke-tools.sh).
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$(mktemp -d)}"
+chmod 700 "$XDG_RUNTIME_DIR"
+WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman LIBSEAT_BACKEND=noop \
+  sway -V -c "$SWAY_CFG" > "$OUT/sway.log" 2>&1 &
+SWAY_PID=$!
+export SWAYSOCK="$XDG_RUNTIME_DIR/sway-ipc.$(id -u).$SWAY_PID.sock"
+
+cleanup() {
+  for tool in foot mako waybar swaybg; do pkill -x "$tool" 2>/dev/null || true; done
+  kill "$SWAY_PID" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+ready=false
+for _ in $(seq 1 30); do
+  if swaymsg -t get_outputs >/dev/null 2>&1; then ready=true; break; fi
+  kill -0 "$SWAY_PID" 2>/dev/null || break
+  sleep 1
+done
+if [ "$ready" != true ]; then
+  note "- sway did not start: FAIL (see sway.log)"
+  tail -n 40 "$OUT/sway.log" | sed 's/^/    /' | tee -a "$SUMMARY"
+  exit 1
+fi
+WL_SOCK=""
+for s in "$XDG_RUNTIME_DIR"/wayland-*; do
+  case "$s" in *.lock) ;; *) WL_SOCK="$s" ;; esac
+done
+[ -n "$WL_SOCK" ] || { note "- no wayland socket: FAIL"; exit 1; }
+export WAYLAND_DISPLAY="${WL_SOCK##*/}" GDK_BACKEND=wayland
+
+# 4. The config autostarts the bar, notifications and wallpaper. Add a notification and a terminal.
+swaymsg exec foot >/dev/null
+notify-send "deskwizard" "Full install check: notifications work" 2>> "$OUT/notify.log" || fail=1
+
+# 5. Wait 10 s, then screenshot the whole screen.
+sleep 10
+grim "$OUT/full-install.png" 2>> "$OUT/grim.log" || fail=1
+
+# 6. Every desktop program the config starts must still be running.
+for tool in waybar mako swaybg foot; do
+  if pgrep -x "$tool" >/dev/null 2>&1; then
+    note "- $tool running: PASS"
+  else
+    note "- $tool running: FAIL"
+    fail=1
+  fi
+done
+if [ -s "$OUT/full-install.png" ]; then
+  note "- screenshot full-install.png: PASS"
+else
+  note "- screenshot full-install.png: FAIL"
+  fail=1
+fi
+
+if [ "$fail" -eq 0 ]; then note "**full install check passed.**"; else note "**full install check failed.**"; fi
+exit "$fail"

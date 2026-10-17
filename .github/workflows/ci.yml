@@ -107,6 +107,50 @@ jobs:
             echo "No site/ or catalog/ changes; skipping the wizard e2e."
           fi
 
+  # Job D: the real installer on debian:trixie, then headless Sway on the installed config, with a screenshot.
+  full-install:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node and build the site and installer
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates
+          npm ci
+          npm run build
+
+      - name: Create a normal user with passwordless sudo (the installer refuses root and uses sudo for apt)
+        run: |
+          apt-get install -y --no-install-recommends sudo
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
+          chmod 440 /etc/sudoers.d/builder
+          chown -R builder "$GITHUB_WORKSPACE"
+
+      - name: Install and check the desktop, then screenshot it
+        run: |
+          # The check needs grim and notify-send in the container; the installer installs the rest.
+          apt-get install -y --no-install-recommends sway xwayland grim libnotify-bin procps dbus-daemon dbus-user-session
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
+            dbus-run-session -- bash -c "cd '$GITHUB_WORKSPACE' && OUT='$GITHUB_WORKSPACE/full-install-out' bash scripts/full-install-check.sh"
+
+      - name: Add the check summary to the job summary
+        if: always()
+        run: |
+          if [ -f full-install-out/summary.md ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            cat full-install-out/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the screenshot and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-install
+          path: full-install-out/
+          if-no-files-found: warn
+
   # Job C: click through the wizard in headless Chromium and save a screenshot per step.
   wizard-e2e:
     needs: changes
