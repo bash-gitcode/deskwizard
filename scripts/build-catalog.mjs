@@ -20,6 +20,7 @@ const cat = loadCatalog();
 const distros = readYaml(cat.distrosPath);
 const fonts = readYaml(cat.fontsPath);
 const extras = readYaml(join(CATALOG, "extras.yaml"));
+const startMethods = readYaml(join(CATALOG, "start-methods.yaml"));
 const palettes = readdirSync(join(CATALOG, "palettes"))
   .filter((n) => n.endsWith(".yaml"))
   .sort()
@@ -111,6 +112,7 @@ const catalog = {
   fonts,
   extras,
   palettes,
+  start_methods: startMethods,
   tools: tools.sort((a, b) => a.display.order - b.display.order),
 };
 

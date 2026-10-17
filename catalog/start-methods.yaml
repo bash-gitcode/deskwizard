@@ -1,0 +1,19 @@
+# Start methods: how the desktop starts after the install (wizard step "Start method").
+# id: stored in builds as start_method. Missing in older builds means "manual".
+# summary: shown on the Review page and printed by the installer. Keep it true for what the installer does.
+# packages: apt packages this method needs, per distro. greetd + tuigreet are only installed for greetd.
+- id: manual
+  name: Manual (I start Sway myself)
+  summary: You run `sway` from the first console after you log in. Nothing else is changed.
+  packages:
+    debian13: []
+- id: tty1
+  name: Auto-start on the first console (tty1)
+  summary: Adds a marked block to ~/.profile (backed up first). Sway starts only on tty1 when no Wayland session is running, so other consoles stay plain shells.
+  packages:
+    debian13: []
+- id: greetd
+  name: Login screen (greetd + tuigreet)
+  summary: Writes /etc/greetd/config.toml and enables greetd with tuigreet (uses sudo). Existing files are backed up first. Start Sway from the login screen.
+  packages:
+    debian13: [greetd, tuigreet]

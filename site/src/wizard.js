@@ -1,10 +1,8 @@
 import { parse, stringify } from "yaml";
-import template from "./installer.template.sh?raw";
+import installerSource from "./installer.sh?raw";
 import {
   buildPlan,
-  renderScript,
-  bootstrapCommand,
-  fitsOneLine,
+  buildCode,
   toPayload,
   fromPayload,
   toBase64,
@@ -12,6 +10,8 @@ import {
   fontById,
   paletteById,
   DEFAULT_PALETTE,
+  DEFAULT_START,
+  MAX_CODE_LENGTH,
   PALETTE_COLOR_TOKENS,
 } from "./generator.js";
 
@@ -94,16 +94,18 @@ export function startWizard(root, catalog) {
     { id: "palette", title: "Palette" },
     { id: "font", title: "Font" },
     ...addOns.map((tool) => ({ id: `tool:${tool.id}`, title: tool.name, tool })),
+    { id: "start", title: "Start method" },
     { id: "review", title: "Review" },
   ];
 
-  const freshState = () => ({ distro: null, display: "wayland", font: catalog.fonts.default, palette: DEFAULT_PALETTE, extras: [], choices: {} });
+  const freshState = () => ({ distro: null, display: "wayland", font: catalog.fonts.default, palette: DEFAULT_PALETTE, start: DEFAULT_START, extras: [], choices: {} });
   // Fills a missing font, palette or extras list (older formats) with defaults, so every build has all three.
   const withDefaults = (state) => ({
     ...state,
     font: state.font ?? catalog.fonts.default,
     palette: state.palette ?? DEFAULT_PALETTE,
     extras: state.extras ?? [],
+    start: state.start ?? DEFAULT_START,
   });
 
   const app = { state: freshState(), index: 0, message: "", notices: [] };
@@ -471,6 +473,32 @@ export function startWizard(root, catalog) {
   }
 
   // ---- review -------------------------------------------------------------
+  // Start method: how Sway starts after the install. Manual is the default.
+  function startStep() {
+    return [
+      el("p", {}, "Choose how Sway starts after the install."),
+      el(
+        "fieldset",
+        { class: "stack" },
+        el("legend", {}, "How should the desktop start?"),
+        catalog.start_methods.map((s) =>
+          el(
+            "label",
+            { class: "option" },
+            el("input", {
+              type: "radio",
+              name: "start",
+              value: s.id,
+              checked: (app.state.start ?? DEFAULT_START) === s.id,
+              onchange: () => { app.state.start = s.id; sync(); },
+            }),
+            el("span", {}, el("strong", { text: s.name }), el("span", { class: "explain", text: ` ${s.summary}` }))
+          )
+        )
+      ),
+    ];
+  }
+
   function reviewStep() {
     const { ok, errors, plan } = buildPlan(app.state, catalog);
     if (!ok) {
@@ -480,9 +508,19 @@ export function startWizard(root, catalog) {
       ];
     }
 
-    const script = renderScript(plan, catalog.fonts, template);
+    const code = buildCode(app.state, catalogVersion);
     const installerUrl = new URL(INSTALLER_PATH, location.href).href;
-    const line = bootstrapCommand(installerUrl, script);
+    const line = `curl -fsSL ${installerUrl} | bash -s -- --build ${code}`;
+    const fits = code.length <= MAX_CODE_LENGTH;
+    // The sha256 of install.sh is written by the build (scripts/generate-install.mjs).
+    const shaOut = el("code", { class: "wrap" }, "loading...");
+    fetch(`${INSTALLER_PATH}.sha256`)
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.text();
+      })
+      .then((t) => { shaOut.textContent = t.split(" ")[0]; })
+      .catch(() => { shaOut.textContent = "not available (run npm run build)"; });
     const shareUrl = `${location.origin}${location.pathname}${encodeBuild(app.state, catalogVersion)}`;
     const fileName = "deskwizard-build.yaml";
 
@@ -508,19 +546,20 @@ export function startWizard(root, catalog) {
       }
     });
 
-    const fits = fitsOneLine(script);
     return [
       el("h3", {}, "Install command"),
-      el("p", {}, "Run this in a terminal on Debian 13. It downloads the installer, checks it, and runs this build. Try --dry-run first if you like."),
+      el("p", {}, "Run this in a terminal on Debian 13. It downloads the installer and runs this build. Add --dry-run at the end to print every step without changing anything."),
       fits
         ? el("textarea", { readonly: true, rows: 3, "aria-label": "Install command", value: line })
-        : el("p", { class: "warn", role: "alert" }, "This build is too large for a one-line command. Download install.sh and run it with bash."),
+        : el("p", { class: "warn", role: "alert" }, `This build code is longer than ${MAX_CODE_LENGTH} characters, so the installer will refuse it. Choose fewer options.`),
       el(
         "div",
         { class: "row" },
         fits ? copyBtn : null,
-        el("button", { type: "button", onclick: () => download("install.sh", script, "text/x-shellscript") }, "Download install.sh")
+        el("button", { type: "button", onclick: () => download("install.sh", installerSource, "text/x-shellscript") }, "Download install.sh")
       ),
+      el("p", { class: "meta" }, "sha256 of install.sh: ", shaOut),
+      el("pre", { class: "script" }, "sha256sum install.sh   # prints the same sha256 as above"),
 
       el("h3", {}, "Packages"),
       el("ul", { class: "mono" }, plan.packages.map((p) => el("li", {}, p))),
@@ -531,8 +570,9 @@ export function startWizard(root, catalog) {
       el("h3", {}, "Files to be written"),
       el("ul", { class: "mono" }, plan.files.map((f) => el("li", {}, `${f.target}  (${f.from})`))),
       el("p", { class: "meta" }, `Font: ${plan.font.name}${plan.downloadFont ? " (downloaded, SHA-256 checked)" : ""}. Existing files are copied to ~/.config-backup/<timestamp>/ first.`),
+      el("p", { class: "meta" }, `Start method: ${plan.startSummary}`),
 
-      el("details", {}, el("summary", {}, "Script preview"), el("pre", { class: "script" }, script)),
+      el("details", {}, el("summary", {}, "Installer preview (install.sh, the same for every build)"), el("pre", { class: "script" }, installerSource)),
 
       el("h3", {}, "Keep this build"),
       el("div", { class: "row" }, shareBtn, el("button", { type: "button", onclick: () => download(fileName, stringify(toPayload(app.state, catalogVersion)), "text/yaml") }, "Save build (.yaml)")),
@@ -565,6 +605,7 @@ export function startWizard(root, catalog) {
       compositor: compositorStep,
       palette: paletteStep,
       font: fontStep,
+      start: startStep,
       review: reviewStep,
     }[step.id];
     const content = body ? body() : toolStep(step.tool);

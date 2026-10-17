@@ -124,18 +124,29 @@ async function main() {
   await variantCards.first().getByRole("button", { name: "Use this" }).click();
   check(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible(), "'Also needs: Nerd Font' appears with Font Awesome only");
   check(await page.locator(".badge[class*='needed-']").first().isVisible(), "needed badge is visible");
-  check((await page.locator("ol.stepper li").count()) === 11, "stepper lists 11 steps: distro, display, compositor, palette, font, 5 tools, review");
+  check((await page.locator("ol.stepper li").count()) === 12, "stepper lists 12 steps: distro, display, compositor, palette, font, 5 tools, start method, review");
   await shot(page, "waybar-variant");
   await page.getByRole("listitem").filter({ hasText: "Also needs: Nerd Font" }).getByRole("button", { name: "Add" }).click();
   check(!(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible()), "Nerd Font prompt goes away after Add");
   await shot(page, "waybar-font-added");
-  await toStep("Review");
+  // Start method: pick auto-start on tty1, so the Save/Load round trip checks start_method too.
+  await toStep("Start method");
+  await page.getByRole("radio", { name: /Auto-start on the first console/ }).check();
+  check(await page.getByRole("radio", { name: /Auto-start on the first console/ }).isChecked(), "tty1 start method is selectable");
+  await shot(page, "start-method");
+  await next();
 
   // 6. Review
   await page.getByRole("heading", { name: "Review" }).waitFor();
   const line = page.getByRole("textbox", { name: "Install command" });
   const oneLiner = await line.inputValue();
   check(oneLiner.includes("/v1/install.sh"), "one-liner uses /v1/install.sh");
+  check(/ \| bash -s -- --build [A-Za-z0-9_-]+$/.test(oneLiner), "one-liner passes the build code with --build and no script");
+  check(!oneLiner.includes("--script"), "one-liner does not use the old --script bootstrap");
+  await page.getByText(/^sha256 of install\.sh: [0-9a-f]{64}$/).waitFor({ timeout: 10000 }).then(
+    () => check(true, "Review shows the sha256 of install.sh"),
+    () => check(false, "Review shows the sha256 of install.sh")
+  );
   await shot(page, "review");
 
   // Save, then Start over, then Load: the same build comes back

@@ -54,7 +54,7 @@ jobs:
             echo "| package | candidate version |"
             echo "| --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
-          for pkg in sway waybar fuzzel foot mako-notifier swaybg; do
+          for pkg in sway waybar fuzzel foot mako-notifier swaybg greetd tuigreet; do
             candidate="$(apt-cache policy "$pkg" | awk '/Candidate:/ {print $2; exit}')"
             if [ -z "$candidate" ] || [ "$candidate" = "(none)" ]; then
               echo "| $pkg | MISSING |" >> "$GITHUB_STEP_SUMMARY"
@@ -67,17 +67,47 @@ jobs:
           done
           exit "$status"
 
-      - name: Dry run of the generated installer (as a normal user; the installer refuses root)
-        run: |
-          useradd -m builder
-          cp -r . /tmp/deskwizard
-          chown -R builder /tmp/deskwizard
-          runuser -u builder -- bash /tmp/deskwizard/site/public/v1/install.sh --dry-run
-
-      - name: shellcheck -x on the generated installer and the smoke scripts
+      - name: shellcheck -x on the installer, the uninstaller and the smoke scripts
         run: |
           shellcheck -x site/public/v1/install.sh
+          shellcheck -x site/public/v1/uninstall.sh
           shellcheck -x scripts/smoke-tools.sh
+
+  # Job H4: the installer's dry run for the default build, in debian:trixie. The full output goes to
+  # the job summary. The test base URL is a file:// copy of the build, so the dry run uses this commit.
+  dry-run:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node and build the site and installer
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates
+          npm ci
+          npm run build
+
+      - name: Dry run of the default build (as a normal user; the installer refuses root)
+        run: |
+          set -o pipefail
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+          CODE="$(node scripts/ci-helpers.mjs code manual)"
+          runuser -u builder -- env HOME=/home/builder DESKWIZARD_TEST_MODE=1 \
+            DESKWIZARD_TEST_BASE_URL="file://$GITHUB_WORKSPACE/site/public/v1" \
+            bash "$GITHUB_WORKSPACE/site/public/v1/install.sh" --build "$CODE" --dry-run 2>&1 | tee dry-run.log
+
+      - name: Put the full dry-run output in the job summary
+        if: always()
+        run: |
+          {
+            echo "## Installer dry run (debian:trixie, default build, full output)"
+            echo
+            echo '```text'
+            cat dry-run.log 2>/dev/null || echo "(no output: the dry run did not start)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Job B: every variant of waybar, foot, fuzzel, mako and swaybg runs under headless Sway (see smoke.yml).
   tool-smoke:
@@ -171,6 +201,57 @@ jobs:
 
       - name: Test the font-awesome fallback when the download fails
         run: bash scripts/test-font-fallback.sh
+
+  # Job G: each start method writes what it promises, in debian:trixie. Real login is not tested here:
+  # systemd is not running in the container, so a test-only systemctl shim records the enable call.
+  start-methods:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    strategy:
+      fail-fast: false
+      matrix:
+        method: [tty1, greetd]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node, sudo and python3 (for the TOML check)
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates sudo python3
+          npm ci
+          npm run build
+
+      - name: Normal user with passwordless sudo; systemctl shim (CI only, no systemd here)
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
+          chmod 440 /etc/sudoers.d/builder
+          printf '%s\n' '#!/bin/sh' 'echo "$@" >> /tmp/systemctl-shim.log' 'exit 0' > /usr/local/bin/systemctl
+          chmod 755 /usr/local/bin/systemctl
+          chown -R builder "$GITHUB_WORKSPACE"
+
+      - name: Run the installer with the ${{ matrix.method }} start method
+        run: |
+          CODE="$(node scripts/ci-helpers.mjs code ${{ matrix.method }})"
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" DESKWIZARD_TEST_MODE=1 \
+            DESKWIZARD_TEST_BASE_URL="file://$GITHUB_WORKSPACE/site/public/v1" \
+            bash "$GITHUB_WORKSPACE/site/public/v1/install.sh" --build "$CODE" 2>&1 | tee install.log
+
+      - name: Assert what the start method wrote
+        run: |
+          set -eu
+          if [ "${{ matrix.method }}" = tty1 ]; then
+            grep -qx '# BEGIN deskwizard' /home/builder/.profile
+            grep -qx '# END deskwizard' /home/builder/.profile
+            grep -q 'exec sway' /home/builder/.profile
+            echo "ok: marked tty1 block in ~/.profile"
+          else
+            python3 -c 'import sys, tomllib; c = tomllib.load(open("/etc/greetd/config.toml", "rb")); cmd = c["default_session"]["command"]; assert "tuigreet" in cmd, cmd; assert c["terminal"]["vt"] == 1; print("ok: /etc/greetd/config.toml parses; command:", cmd)'
+            test -s /usr/share/wayland-sessions/sway.desktop || { echo 'missing sway session entry'; exit 1; }
+            echo "ok: sway session entry exists"
+            grep -q 'enable greetd.service' /tmp/systemctl-shim.log
+            echo "ok: greetd.service enable requested"
+          fi
 
   # Job C: click through the wizard in headless Chromium and save a screenshot per step.
   wizard-e2e:

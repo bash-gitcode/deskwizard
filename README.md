@@ -70,11 +70,12 @@ catalog/
 scripts/
   validate.mjs           schema + cross-reference checks
   build-catalog.mjs      catalog/ -> site/public/catalog.json
-  generate-install.mjs   state -> install.sh (same generator as the site)
+  generate-install.mjs   catalog -> v1/ (static install.sh, uninstall.sh, manifest.json, data files)
 site/
   index.html, src/        vanilla JS wizard (no UI framework)
-  src/generator.js        pure state -> plan -> script logic
-  src/installer.template.sh  the bash template
+  src/generator.js        pure state -> plan -> build code logic
+  src/installer.sh        static installer (reads the build code as data only)
+  src/uninstall.sh        restores the latest backups
 ```
 
 ## Add a variant in 5 minutes
