@@ -44,7 +44,7 @@ fi
 # sway refuses to start without XDG_RUNTIME_DIR, even for a config check.
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$(mktemp -d)}"
 chmod 700 "$XDG_RUNTIME_DIR"
-if [ -s "$SWAY_CFG" ] && sway -C -c "$SWAY_CFG" > "$OUT/sway-check.log" 2>&1; then
+if [ -s "$SWAY_CFG" ] && WLR_BACKENDS=headless LIBSEAT_BACKEND=noop sway -C -c "$SWAY_CFG" > "$OUT/sway-check.log" 2>&1; then
   note "- sway -C on $SWAY_CFG: PASS"
 else
   note "- sway -C on $SWAY_CFG: FAIL"
