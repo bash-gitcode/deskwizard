@@ -81,6 +81,7 @@ for (const tool of cat.tools) {
     works_with: data.works_with,
     requires: data.requires,
     extras: data.extras ?? [],
+    recommends: data.recommends ?? [],
     command: data.command ?? null,
     autostart: data.autostart ?? [],
     binds: data.binds ?? [],

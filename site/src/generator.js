@@ -44,14 +44,14 @@ function extraById(catalog, id) {
   return (catalog.extras ?? []).find((e) => e.id === id);
 }
 
-// Extras that the chosen tools need but the state has not accepted yet.
-// Used by the wizard for "Also needs: X [Add]".
+// Recommended extras of the chosen tools that the state has not accepted yet.
+// Used by the wizard for "Also recommended: X [Add]". Required extras are never listed here: they are always included.
 export function missingExtras(state, catalog) {
   const chosen = Object.keys(state?.choices ?? {}).map((id) => toolById(catalog, id)).filter(Boolean);
   const accepted = state?.extras ?? [];
   const missing = [];
   for (const tool of chosen) {
-    for (const id of tool.extras ?? []) {
+    for (const id of tool.recommends ?? []) {
       if (!accepted.includes(id) && !missing.includes(id)) missing.push(id);
     }
   }
@@ -157,7 +157,8 @@ export function buildPlan(state, catalog) {
   const autostart = [];
   const cheatsheet = [];
   const activeExtras = (extras ?? []).map((id) => extraById(catalog, id)).filter(Boolean);
-  const neededExtras = activeExtras.filter((e) => chosen.some((t) => (t.extras ?? []).includes(e.id)));
+  // Every extra in the plan: required by a chosen tool, or accepted by the user (recommended or added).
+  const neededExtras = activeExtras;
 
   if (!errors.length) {
     for (const tool of chosen) {

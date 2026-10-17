@@ -138,6 +138,10 @@ for (const [id, { data, tool }] of toolsById) {
   for (const ref of data.extras ?? []) {
     if (!extraIds.includes(ref)) fail(file, `extras lists unknown extra '${ref}'.`);
   }
+  for (const ref of data.recommends ?? []) {
+    if (!extraIds.includes(ref)) fail(file, `recommends lists unknown extra '${ref}'.`);
+    else if ((data.extras ?? []).includes(ref)) fail(file, `extra '${ref}' is both required (extras) and recommended.`);
+  }
   if (data.requires.includes(id)) fail(file, "a tool cannot require itself.");
 
   // Variants

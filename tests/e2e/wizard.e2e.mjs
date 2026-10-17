@@ -64,10 +64,27 @@ async function main() {
 
   // 3. Compositor: Sway
   await page.getByRole("button", { name: "Use this" }).first().click();
+  // Sway tiers: portal and polkit are required (Included, no button); screenshots is recommended (Add); media keys is optional (no prompt).
+  check(await page.getByText("Included: Desktop portal (needed because Sway)").isVisible(), "Sway shows the required portal as Included");
+  check(await page.getByText("Included: Polkit agent (needed because Sway)").isVisible(), "Sway shows the required polkit agent as Included");
+  const recommended = page.getByRole("listitem").filter({ hasText: "Also recommended: Screenshots" });
+  check(await recommended.getByRole("button", { name: "Add" }).isVisible(), "Sway offers screenshots as Also recommended, with Add");
+  check((await page.getByText("Volume and brightness keys").count()) === 0, "optional media keys are not prompted");
   await shot(page, "compositor");
+  await recommended.getByRole("button", { name: "Add" }).click();
+  check(await page.getByText("Screenshots (grim and slurp) is in your build").isVisible(), "accepted screenshots shows 'is in your build'");
   await next();
 
-  // 4. Font: Font Awesome only, so Waybar must ask for the Nerd Font
+  // 4. Palette: pick a different palette; the swatch strip shows its colors
+  await page.getByRole("heading", { name: "Palette" }).waitFor();
+  const paletteRadios = page.locator("input[name=palette]");
+  check((await paletteRadios.count()) >= 2, "palette step lists at least two palettes");
+  await paletteRadios.nth(1).check();
+  check((await page.locator(".swatch").count()) === 8, "palette step shows the 8 color swatches");
+  await shot(page, "palette");
+  await next();
+
+  // 5. Font: Font Awesome only, so Waybar must ask for the Nerd Font
   await page.getByRole("radio", { name: /Font Awesome only/ }).check();
   await shot(page, "font");
   await next();
@@ -90,6 +107,7 @@ async function main() {
   await variantCards.first().getByRole("button", { name: "Use this" }).click();
   check(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible(), "'Also needs: Nerd Font' appears with Font Awesome only");
   check(await page.locator(".badge[class*='needed-']").first().isVisible(), "needed badge is visible");
+  check((await page.locator("ol.stepper li").count()) === 11, "stepper lists 11 steps: distro, display, compositor, palette, font, 5 tools, review");
   await shot(page, "waybar-variant");
   await page.getByRole("listitem").filter({ hasText: "Also needs: Nerd Font" }).getByRole("button", { name: "Add" }).click();
   check(!(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible()), "Nerd Font prompt goes away after Add");
@@ -115,6 +133,7 @@ async function main() {
   await page.getByRole("radio", { name: /Wayland/ }).check();
   await next();
   await page.getByRole("button", { name: "Use this" }).first().click();
+  await next();
   await next();
   await page.getByRole("radio", { name: /Font Awesome only/ }).check();
   await next();

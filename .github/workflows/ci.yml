@@ -83,8 +83,34 @@ jobs:
   tool-smoke:
     uses: ./.github/workflows/smoke.yml
 
+  # On pull requests, the e2e job runs only when site/ or catalog/ changed. Pushes to main always run it.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.filter.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BASE" "$GITHUB_SHA" | grep -qE '^(site|catalog)/'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No site/ or catalog/ changes; skipping the wizard e2e."
+          fi
+
   # Job C: click through the wizard in headless Chromium and save a screenshot per step.
   wizard-e2e:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

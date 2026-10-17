@@ -235,6 +235,12 @@ export function startWizard(root, catalog) {
           );
         })
       ),
+      // The chosen compositor's own extras (portal and polkit are included; screenshots is offered).
+      el(
+        "ul",
+        { class: "extras" },
+        compositors.filter((c) => app.state.choices[c.id]).flatMap((c) => extrasPrompts(c))
+      ),
     ];
   }
 
@@ -316,19 +322,26 @@ export function startWizard(root, catalog) {
     ];
   }
 
-  // "Also needs" rows for the extras a tool depends on (portal, polkit agent, and so on).
+  // Extras of a tool, in three tiers:
+  //   required (tool.extras): always included, shown as "Included", no button;
+  //   recommended (tool.recommends): "Also recommended" with an Add button;
+  //   optional (anything else): no prompt.
   function extrasPrompts(tool) {
     const accepted = app.state.extras ?? [];
-    return (tool.extras ?? []).map((id) => {
-      const name = catalog.extras.find((e) => e.id === id)?.name ?? id;
-      if (accepted.includes(id)) return el("li", { class: "ok" }, `✓ ${name} is in your build`);
+    const nameOf = (id) => catalog.extras.find((e) => e.id === id)?.name ?? id;
+    const required = (tool.extras ?? []).map((id) =>
+      el("li", { class: "ok" }, `Included: ${nameOf(id)} (needed because ${toolName(tool.id)})`)
+    );
+    const recommended = (tool.recommends ?? []).map((id) => {
+      if (accepted.includes(id)) return el("li", { class: "ok" }, `✓ ${nameOf(id)} is in your build`);
       return el(
         "li",
         { class: "missing" },
-        `Also needs: ${name} `,
+        `Also recommended: ${nameOf(id)} `,
         el("button", { type: "button", onclick: () => { app.state.extras = [...accepted, id]; sync(); } }, "Add")
       );
     });
+    return [...required, ...recommended];
   }
 
   // One page per add-on tool, all generated from its tool.yaml and variants.

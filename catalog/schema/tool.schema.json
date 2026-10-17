@@ -38,6 +38,7 @@
     "default_variant": { "type": ["string", "null"] },
     "command": { "type": ["string", "null"] },
     "extras": { "type": "array", "items": { "type": "string" } },
+    "recommends": { "type": "array", "items": { "type": "string" } },
     "autostart": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "binds": {
       "type": "array",

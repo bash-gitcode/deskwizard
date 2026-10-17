@@ -14,6 +14,7 @@ import {
   fitsOneLine,
   renderScript,
   SCHEMA_VERSION,
+  missingExtras,
 } from "../site/src/generator.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -111,4 +112,37 @@ test("a missing compositor is reported, not thrown", () => {
   const plan = buildPlan({ ...sway, choices: { waybar: { variant: "minimal" } } }, catalog);
   assert.equal(plan.ok, false);
   assert.ok(plan.errors.some((e) => /Choose exactly one compositor/.test(e)));
+});
+
+
+// Extras come in three tiers: required (always included), recommended (offered with Add), optional (no prompt).
+const swayOnly = { distro: "debian13", display: "wayland", font: "jetbrains-mono", palette: "midnight", extras: [], choices: { sway: { variant: null } } };
+
+test("required extras are always in the plan, and are not offered as recommended", () => {
+  const plan = planOf(swayOnly, catalog);
+  assert.ok(plan.packages.includes("xdg-desktop-portal-wlr"), "portal is required by sway");
+  assert.ok(plan.packages.includes("lxpolkit"), "polkit agent is required by sway");
+  assert.ok(!missingExtras(swayOnly, catalog).includes("portal"));
+  assert.ok(!missingExtras(swayOnly, catalog).includes("polkit"));
+});
+
+test("recommended extras are offered, not installed, until the user adds them", () => {
+  const plan = planOf(swayOnly, catalog);
+  assert.deepEqual(missingExtras(swayOnly, catalog), ["screenshot"]);
+  assert.ok(!plan.packages.includes("slurp"), "screenshot tools are not installed unless accepted");
+  assert.ok(!plan.binds.some((b) => b.key === "Print"));
+});
+
+test("an accepted recommended extra is installed with its binds", () => {
+  const state = { ...swayOnly, extras: ["screenshot"] };
+  const plan = planOf(state, catalog);
+  assert.ok(plan.packages.includes("slurp"));
+  assert.ok(plan.binds.some((b) => b.key === "Print"));
+  assert.deepEqual(missingExtras(state, catalog), []);
+});
+
+test("optional extras (not required or recommended) are never prompted or installed by default", () => {
+  const plan = planOf(swayOnly, catalog);
+  assert.ok(!missingExtras(swayOnly, catalog).includes("media-keys"));
+  assert.ok(!plan.packages.includes("brightnessctl"));
 });
