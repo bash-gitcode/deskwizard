@@ -1,15 +1,18 @@
 import { parse, stringify } from "yaml";
-import template from "./installer.template.sh?raw";
+import installerSource from "./installer.sh?raw";
 import {
   buildPlan,
-  renderScript,
-  bootstrapCommand,
-  fitsOneLine,
+  buildCode,
   toPayload,
   fromPayload,
   toBase64,
   fromBase64,
   fontById,
+  paletteById,
+  DEFAULT_PALETTE,
+  DEFAULT_START,
+  MAX_CODE_LENGTH,
+  PALETTE_COLOR_TOKENS,
 } from "./generator.js";
 
 const HASH_KEY = "build=";
@@ -39,11 +42,11 @@ function encodeBuild(state, catalogVersion) {
   return `#${HASH_KEY}${encodeURIComponent(toBase64(JSON.stringify(toPayload(state, catalogVersion))))}`;
 }
 
-function decodeBuild(hash, catalogVersion) {
+function decodeBuild(hash, catalogVersion, catalog) {
   const prefix = `#${HASH_KEY}`;
   if (!hash.startsWith(prefix)) return null;
   const obj = JSON.parse(fromBase64(decodeURIComponent(hash.slice(prefix.length))));
-  return fromPayload(obj, catalogVersion);
+  return fromPayload(obj, catalogVersion, catalog);
 }
 
 // Selecting a compositor replaces the other one. Selecting a tool sets its choice.
@@ -81,26 +84,35 @@ export function startWizard(root, catalog) {
   const catalogVersion = catalog.catalog_version;
   const toolName = (id) => catalog.tools.find((t) => t.id === id)?.name ?? id;
   const compositors = catalog.tools.filter((t) => t.type === "compositor");
-  const addOns = catalog.tools.filter((t) => t.type !== "compositor");
+  // Add-ons in the order the user picks them: terminal, launcher, bar, notifications, wallpaper.
+  const addOns = catalog.tools.filter((t) => t.type !== "compositor").sort((a, b) => a.display.order - b.display.order);
 
   const steps = [
     { id: "distro", title: "Distro" },
     { id: "display", title: "Display system" },
     { id: "compositor", title: "Compositor" },
+    { id: "palette", title: "Palette" },
     { id: "font", title: "Font" },
     ...addOns.map((tool) => ({ id: `tool:${tool.id}`, title: tool.name, tool })),
+    { id: "start", title: "Start method" },
     { id: "review", title: "Review" },
   ];
 
-  const freshState = () => ({ distro: null, display: "wayland", font: catalog.fonts.default, choices: {} });
-  // Fills a missing font (older formats) with the catalog default, so every build has one.
-  const withDefaults = (state) => ({ ...state, font: state.font ?? catalog.fonts.default });
+  const freshState = () => ({ distro: null, display: "wayland", font: catalog.fonts.default, palette: DEFAULT_PALETTE, start: DEFAULT_START, extras: [], choices: {} });
+  // Fills a missing font, palette or extras list (older formats) with defaults, so every build has all three.
+  const withDefaults = (state) => ({
+    ...state,
+    font: state.font ?? catalog.fonts.default,
+    palette: state.palette ?? DEFAULT_PALETTE,
+    extras: state.extras ?? [],
+    start: state.start ?? DEFAULT_START,
+  });
 
   const app = { state: freshState(), index: 0, message: "", notices: [] };
 
   // A shared link or a saved build opens on Review and shows any notices about it.
   try {
-    const loaded = decodeBuild(location.hash, catalogVersion);
+    const loaded = decodeBuild(location.hash, catalogVersion, catalog);
     if (loaded) {
       app.state = withDefaults(loaded.state);
       app.notices = loaded.notices;
@@ -225,6 +237,12 @@ export function startWizard(root, catalog) {
           );
         })
       ),
+      // The chosen compositor's own extras (portal and polkit are included; screenshots is offered).
+      el(
+        "ul",
+        { class: "extras" },
+        compositors.filter((c) => app.state.choices[c.id]).flatMap((c) => extrasPrompts(c))
+      ),
     ];
   }
 
@@ -267,6 +285,67 @@ export function startWizard(root, catalog) {
     ];
   }
 
+  // ---- palette --------------------------------------------------------------
+  const currentPalette = () => paletteById(catalog, app.state.palette) ?? paletteById(catalog, DEFAULT_PALETTE);
+
+  // Live strip of a palette's color tokens.
+  function swatchStrip(p) {
+    return el(
+      "div",
+      { class: "swatches", "aria-label": `Colors of ${p.name}` },
+      PALETTE_COLOR_TOKENS.map((t) => el("span", { class: "swatch", title: `${t} ${p.tokens[t]}`, style: `background:${p.tokens[t]}` }))
+    );
+  }
+
+  function paletteStep() {
+    return [
+      el("p", {}, "One palette colors the terminal, launcher, bar, notifications and wallpaper."),
+      el(
+        "fieldset",
+        { class: "stack" },
+        el("legend", {}, "Which palette?"),
+        catalog.palettes.map((p) =>
+          el(
+            "label",
+            { class: "option" },
+            el("input", {
+              type: "radio",
+              name: "palette",
+              value: p.id,
+              checked: app.state.palette === p.id,
+              onchange: () => { app.state.palette = p.id; sync(); },
+            }),
+            el("span", {}, el("strong", { text: p.name }), el("span", { class: "explain", text: ` ${p.mode} palette` })),
+            swatchStrip(p)
+          )
+        )
+      ),
+      el("p", { class: "meta" }, "Screenshots use the default palette; your colors apply when installed."),
+    ];
+  }
+
+  // Extras of a tool, in three tiers:
+  //   required (tool.extras): always included, shown as "Included", no button;
+  //   recommended (tool.recommends): "Also recommended" with an Add button;
+  //   optional (anything else): no prompt.
+  function extrasPrompts(tool) {
+    const accepted = app.state.extras ?? [];
+    const nameOf = (id) => catalog.extras.find((e) => e.id === id)?.name ?? id;
+    const required = (tool.extras ?? []).map((id) =>
+      el("li", { class: "ok" }, `Included: ${nameOf(id)} (needed because ${toolName(tool.id)})`)
+    );
+    const recommended = (tool.recommends ?? []).map((id) => {
+      if (accepted.includes(id)) return el("li", { class: "ok" }, `✓ ${nameOf(id)} is in your build`);
+      return el(
+        "li",
+        { class: "missing" },
+        `Also recommended: ${nameOf(id)} `,
+        el("button", { type: "button", onclick: () => { app.state.extras = [...accepted, id]; sync(); } }, "Add")
+      );
+    });
+    return [...required, ...recommended];
+  }
+
   // One page per add-on tool, all generated from its tool.yaml and variants.
   function toolStep(tool) {
     const choice = app.state.choices[tool.id];
@@ -294,6 +373,8 @@ export function startWizard(root, catalog) {
         )
       );
     });
+
+    requires.push(...extrasPrompts(tool));
 
     // Waybar's looks are designed for a Nerd Font. With "Font Awesome only" the icons fall back
     // to Font Awesome, so this is shown as a prompt, not a block.
@@ -329,13 +410,7 @@ export function startWizard(root, catalog) {
         }),
         el("h3", { text: v.name }),
         el("p", { class: "meta" }, "Good for: ", v.good_for.join(", ")),
-        el(
-          "div",
-          { class: "swatches", "aria-label": "Palette" },
-          Object.entries(v.palette).map(([key, color]) =>
-            el("span", { class: "swatch", title: `${key} ${color}`, style: `background:${color}` })
-          )
-        ),
+        swatchStrip(currentPalette()),
         el(
           "button",
           {
@@ -398,6 +473,32 @@ export function startWizard(root, catalog) {
   }
 
   // ---- review -------------------------------------------------------------
+  // Start method: how Sway starts after the install. Manual is the default.
+  function startStep() {
+    return [
+      el("p", {}, "Choose how Sway starts after the install."),
+      el(
+        "fieldset",
+        { class: "stack" },
+        el("legend", {}, "How should the desktop start?"),
+        catalog.start_methods.map((s) =>
+          el(
+            "label",
+            { class: "option" },
+            el("input", {
+              type: "radio",
+              name: "start",
+              value: s.id,
+              checked: (app.state.start ?? DEFAULT_START) === s.id,
+              onchange: () => { app.state.start = s.id; sync(); },
+            }),
+            el("span", {}, el("strong", { text: s.name }), el("span", { class: "explain", text: ` ${s.summary}` }))
+          )
+        )
+      ),
+    ];
+  }
+
   function reviewStep() {
     const { ok, errors, plan } = buildPlan(app.state, catalog);
     if (!ok) {
@@ -407,9 +508,19 @@ export function startWizard(root, catalog) {
       ];
     }
 
-    const script = renderScript(plan, catalog.fonts, template);
+    const code = buildCode(app.state, catalogVersion);
     const installerUrl = new URL(INSTALLER_PATH, location.href).href;
-    const line = bootstrapCommand(installerUrl, script);
+    const line = `curl -fsSL ${installerUrl} | bash -s -- --build ${code}`;
+    const fits = code.length <= MAX_CODE_LENGTH;
+    // The sha256 of install.sh is written by the build (scripts/generate-install.mjs).
+    const shaOut = el("code", { class: "wrap" }, "loading...");
+    fetch(`${INSTALLER_PATH}.sha256`)
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.text();
+      })
+      .then((t) => { shaOut.textContent = t.split(" ")[0]; })
+      .catch(() => { shaOut.textContent = "not available (run npm run build)"; });
     const shareUrl = `${location.origin}${location.pathname}${encodeBuild(app.state, catalogVersion)}`;
     const fileName = "deskwizard-build.yaml";
 
@@ -423,7 +534,7 @@ export function startWizard(root, catalog) {
       const file = loadInput.files?.[0];
       if (!file) return;
       try {
-        const loaded = fromPayload(parse(await file.text()), catalogVersion);
+        const loaded = fromPayload(parse(await file.text()), catalogVersion, catalog);
         app.state = withDefaults(loaded.state);
         app.notices = loaded.notices;
         app.index = steps.length - 1;
@@ -435,28 +546,33 @@ export function startWizard(root, catalog) {
       }
     });
 
-    const fits = fitsOneLine(script);
     return [
       el("h3", {}, "Install command"),
-      el("p", {}, "Run this in a terminal on Debian 13. It downloads the installer, checks it, and runs this build. Try --dry-run first if you like."),
+      el("p", {}, "Run this in a terminal on Debian 13. It downloads the installer and runs this build. Add --dry-run at the end to print every step without changing anything."),
       fits
         ? el("textarea", { readonly: true, rows: 3, "aria-label": "Install command", value: line })
-        : el("p", { class: "warn", role: "alert" }, "This build is too large for a one-line command. Download install.sh and run it with bash."),
+        : el("p", { class: "warn", role: "alert" }, `This build code is longer than ${MAX_CODE_LENGTH} characters, so the installer will refuse it. Choose fewer options.`),
       el(
         "div",
         { class: "row" },
         fits ? copyBtn : null,
-        el("button", { type: "button", onclick: () => download("install.sh", script, "text/x-shellscript") }, "Download install.sh")
+        el("button", { type: "button", onclick: () => download("install.sh", installerSource, "text/x-shellscript") }, "Download install.sh")
       ),
+      el("p", { class: "meta" }, "sha256 of install.sh: ", shaOut),
+      el("pre", { class: "script" }, "sha256sum install.sh   # prints the same sha256 as above"),
 
       el("h3", {}, "Packages"),
       el("ul", { class: "mono" }, plan.packages.map((p) => el("li", {}, p))),
 
+      el("h3", {}, "Keybinds"),
+      el("pre", { class: "script" }, plan.cheatsheet.length ? plan.cheatsheet.join("\n") : "No keybinds in this build."),
+
       el("h3", {}, "Files to be written"),
       el("ul", { class: "mono" }, plan.files.map((f) => el("li", {}, `${f.target}  (${f.from})`))),
       el("p", { class: "meta" }, `Font: ${plan.font.name}${plan.downloadFont ? " (downloaded, SHA-256 checked)" : ""}. Existing files are copied to ~/.config-backup/<timestamp>/ first.`),
+      el("p", { class: "meta" }, `Start method: ${plan.startSummary}`),
 
-      el("details", {}, el("summary", {}, "Script preview"), el("pre", { class: "script" }, script)),
+      el("details", {}, el("summary", {}, "Installer preview (install.sh, the same for every build)"), el("pre", { class: "script" }, installerSource)),
 
       el("h3", {}, "Keep this build"),
       el("div", { class: "row" }, shareBtn, el("button", { type: "button", onclick: () => download(fileName, stringify(toPayload(app.state, catalogVersion)), "text/yaml") }, "Save build (.yaml)")),
@@ -487,7 +603,9 @@ export function startWizard(root, catalog) {
       distro: distroStep,
       display: displayStep,
       compositor: compositorStep,
+      palette: paletteStep,
       font: fontStep,
+      start: startStep,
       review: reviewStep,
     }[step.id];
     const content = body ? body() : toolStep(step.tool);

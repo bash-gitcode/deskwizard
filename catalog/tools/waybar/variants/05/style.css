@@ -1,11 +1,11 @@
 /* deskwizard variant 05: dock-like.
  * Palette colors are @define-color names (GTK CSS has no var()).
  * Only the lines below may contain color literals. */
-@define-color bg #2e3440;
-@define-color fg #eceff4;
-@define-color accent #88c0d0;
-@define-color warn #ebcb8b;
-@define-color crit #bf616a;
+@define-color bg $bg;
+@define-color fg $fg;
+@define-color accent $accent;
+@define-color warn $warn;
+@define-color crit $error;
 
 * {
   font-family: "{{NERD_FONT}}", "FontAwesome", sans-serif;

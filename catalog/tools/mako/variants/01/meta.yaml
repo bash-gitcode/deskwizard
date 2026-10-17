@@ -1,0 +1,8 @@
+id: corner
+name: Corner
+good_for:
+  - Everyday use
+  - Default look
+requires:
+  - sway
+screenshot: screenshot.svg

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Validates the whole catalog. Prints every problem it finds, then exits 1 if any.
 // Run with: npm run validate
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import { CATALOG, loadCatalog, readYaml, readText, parseJsonc, rel } from "./lib/load.mjs";
+import { resolveTokens, PALETTE_COLOR_TOKENS, PALETTE_FONT_TOKENS } from "../site/src/generator.js";
 
 const errors = [];
 const fail = (file, message) => errors.push(`[${file}] ${message}`);
@@ -77,6 +78,35 @@ let distroIds = [];
   }
 }
 
+// 2b. Palettes (tokens used by variant files)
+const palettes = [];
+for (const name of readdirSync(join(CATALOG, "palettes")).filter((n) => n.endsWith(".yaml")).sort()) {
+  const file = rel(join(CATALOG, "palettes", name));
+  const p = readYaml(join(CATALOG, "palettes", name));
+  if (!checkSchema("palette.schema.json", p, file)) continue;
+  if (p.id !== name.replace(/\.yaml$/, "")) fail(file, `id '${p.id}' must match the file name.`);
+  for (const t of [...PALETTE_COLOR_TOKENS, ...PALETTE_FONT_TOKENS]) {
+    if (!(t in p.tokens)) fail(file, `missing token '${t}'.`);
+  }
+  palettes.push(p);
+}
+if (palettes.filter((p) => p.default).length !== 1) fail("catalog/palettes", "exactly one palette must have default: true.");
+
+// 2c. Extras (portal, polkit, screenshot, media keys)
+const extraIds = [];
+{
+  const file = rel(join(CATALOG, "extras.yaml"));
+  const extras = readYaml(join(CATALOG, "extras.yaml"));
+  if (!Array.isArray(extras)) fail(file, "extras.yaml must be a list of extras.");
+  else {
+    for (const e of extras) {
+      if (!checkSchema("extra.schema.json", e, `${file} (extra '${e?.id ?? "?"}')`)) continue;
+      if (extraIds.includes(e.id)) fail(file, `duplicate extra id '${e.id}'.`);
+      extraIds.push(e.id);
+    }
+  }
+}
+
 // 3. Tools
 const toolIds = new Set();
 const toolsById = new Map();
@@ -104,6 +134,13 @@ for (const [id, { data, tool }] of toolsById) {
   // its own checks is already reported once, so it is not reported again here.
   for (const ref of [...data.works_with, ...data.requires]) {
     if (!dirToolIds.has(ref)) fail(file, `references unknown tool '${ref}' in works_with/requires.`);
+  }
+  for (const ref of data.extras ?? []) {
+    if (!extraIds.includes(ref)) fail(file, `extras lists unknown extra '${ref}'.`);
+  }
+  for (const ref of data.recommends ?? []) {
+    if (!extraIds.includes(ref)) fail(file, `recommends lists unknown extra '${ref}'.`);
+    else if ((data.extras ?? []).includes(ref)) fail(file, `extra '${ref}' is both required (extras) and recommended.`);
   }
   if (data.requires.includes(id)) fail(file, "a tool cannot require itself.");
 
@@ -133,15 +170,21 @@ for (const [id, { data, tool }] of toolsById) {
       if (!data.requires.includes(req)) fail(mfile, `requires '${req}' but the tool's tool.yaml does not list it in requires.`);
     }
 
+    // Bar variants ship a Waybar config and style. Other tools ship only their own files.
+    const isBar = data.type === "bar";
     // config.jsonc: must parse, and must agree with meta.options
     const cfgPath = join(v.path, "config.jsonc");
-    if (!existsSync(cfgPath)) fail(mfile, "missing config.jsonc next to meta.yaml.");
+    if (!isBar) {
+      // no Waybar config expected
+    } else if (!existsSync(cfgPath)) fail(mfile, "missing config.jsonc next to meta.yaml.");
     else {
       try {
         const cfg = parseJsonc(readText(cfgPath));
         const cfile = rel(cfgPath);
-        if (cfg.height !== meta.options.height) fail(cfile, `height ${cfg.height} differs from meta.yaml options.height ${meta.options.height}.`);
-        if (cfg.position !== meta.options.position) fail(cfile, `position '${cfg.position}' differs from meta.yaml options.position '${meta.options.position}'.`);
+        if (meta.options) {
+          if (cfg.height !== meta.options.height) fail(cfile, `height ${cfg.height} differs from meta.yaml options.height ${meta.options.height}.`);
+          if (cfg.position !== meta.options.position) fail(cfile, `position '${cfg.position}' differs from meta.yaml options.position '${meta.options.position}'.`);
+        }
       } catch (e) {
         fail(rel(cfgPath), `config.jsonc is not valid JSON(C): ${e.message}`);
       }
@@ -149,15 +192,12 @@ for (const [id, { data, tool }] of toolsById) {
 
     // style.css: palette names must be @define-color lines, and no other color literals
     const stylePath = join(v.path, "style.css");
-    if (!existsSync(stylePath)) fail(mfile, "missing style.css next to meta.yaml.");
+    if (!isBar) {
+      // no Waybar style expected
+    } else if (!existsSync(stylePath)) fail(mfile, "missing style.css next to meta.yaml.");
     else {
       const css = readText(stylePath);
       const sfile = rel(stylePath);
-      const defined = new Map();
-      for (const m of css.matchAll(/@define-color\s+([a-z_]+)\s+(#[0-9a-fA-F]{6});/g)) defined.set(m[1], m[2].toLowerCase());
-      for (const [name, hex] of Object.entries(meta.palette)) {
-        if (defined.get(name) !== hex.toLowerCase()) fail(sfile, `palette '${name}' (${hex}) must be defined as '@define-color ${name} ${hex};'.`);
-      }
       // Remove the allowed define-color lines, then look for any remaining color literal.
       const outside = css.replace(/@define-color[^;]*;/g, "");
       const literal = outside.match(/#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/);
@@ -165,6 +205,16 @@ for (const [id, { data, tool }] of toolsById) {
     }
 
     if (!existsSync(join(v.path, meta.screenshot))) fail(mfile, `screenshot '${meta.screenshot}' does not exist.`);
+
+    // Every palette must resolve every $token in the variant's text files.
+    for (const f of readdirSync(v.path)) {
+      if (/\.(yaml|svg|png)$/.test(f) || statSync(join(v.path, f)).isDirectory()) continue;
+      const text = readText(join(v.path, f));
+      for (const p of palettes) {
+        const res = resolveTokens(text, p);
+        if (res.unknown.length) fail(rel(join(v.path, f)), `unknown palette token ${[...new Set(res.unknown)].join(", ")} (palette ${p.id}).`);
+      }
+    }
   }
 
   if (data.default_variant !== null && tool.variants.length > 0 && !variantIds.includes(data.default_variant)) {

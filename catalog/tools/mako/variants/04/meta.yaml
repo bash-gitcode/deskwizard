@@ -1,0 +1,8 @@
+id: rounded
+name: Rounded
+good_for:
+  - Soft look
+  - Pill style
+requires:
+  - sway
+screenshot: screenshot.svg

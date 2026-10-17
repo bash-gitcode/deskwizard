@@ -20,7 +20,10 @@ jobs:
       - name: Install build tools
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends nodejs npm shellcheck ca-certificates
+          apt-get install -y --no-install-recommends nodejs npm shellcheck ca-certificates git
+
+      - name: Refuse secret-looking files
+        run: node scripts/check-secrets.mjs
 
       - name: Build the site and installer
         run: |
@@ -42,67 +45,236 @@ jobs:
           done
           exit "$status"
 
-      - name: Dry run of the generated installer (as a normal user; the installer refuses root)
+      - name: Packaged versions in Debian 13 (fails if any candidate is missing)
         run: |
-          useradd -m builder
-          cp -r . /tmp/deskwizard
-          chown -R builder /tmp/deskwizard
-          runuser -u builder -- bash /tmp/deskwizard/site/public/v1/install.sh --dry-run
+          status=0
+          {
+            echo "## Packaged versions (debian:trixie)"
+            echo
+            echo "| package | candidate version |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for pkg in sway waybar fuzzel foot mako-notifier swaybg greetd tuigreet; do
+            candidate="$(apt-cache policy "$pkg" | awk '/Candidate:/ {print $2; exit}')"
+            if [ -z "$candidate" ] || [ "$candidate" = "(none)" ]; then
+              echo "| $pkg | MISSING |" >> "$GITHUB_STEP_SUMMARY"
+              echo "MISSING: $pkg has no candidate in Debian 13"
+              status=1
+            else
+              echo "| $pkg | $candidate |" >> "$GITHUB_STEP_SUMMARY"
+              echo "version: $pkg $candidate"
+            fi
+          done
+          exit "$status"
 
-      - name: shellcheck -x on the generated installer and the smoke script
+      - name: shellcheck -x on the installer, the uninstaller and the smoke scripts
         run: |
           shellcheck -x site/public/v1/install.sh
-          shellcheck -x scripts/smoke-waybar.sh
+          shellcheck -x site/public/v1/uninstall.sh
+          shellcheck -x scripts/smoke-tools.sh
 
-  # Job B: each Waybar variant starts under headless Sway, stays up for 5 s, and is screenshotted.
-  waybar-variants:
+  # Job H4: the installer's dry run for the default build, in debian:trixie. The full output goes to
+  # the job summary. The test base URL is a file:// copy of the build, so the dry run uses this commit.
+  dry-run:
     runs-on: ubuntu-latest
     container: debian:trixie
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Sway, Waybar and the pinned fonts
+      - name: Install Node and build the site and installer
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends \
-            nodejs npm ca-certificates curl xz-utils procps \
-            sway xwayland waybar grim fonts-font-awesome fontconfig dbus-daemon dbus-user-session
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils
+          npm ci
+          npm run build
+
+      - name: Dry run of the default build (as a normal user; the installer refuses root)
+        run: |
+          set -o pipefail
           useradd -m builder
           chown -R builder "$GITHUB_WORKSPACE"
+          CODE="$(node scripts/ci-helpers.mjs code manual)"
+          runuser -u builder -- env HOME=/home/builder DESKWIZARD_TEST_MODE=1 \
+            DESKWIZARD_TEST_BASE_URL="file://$GITHUB_WORKSPACE/site/public/v1" \
+            bash "$GITHUB_WORKSPACE/site/public/v1/install.sh" --build "$CODE" --dry-run 2>&1 | tee dry-run.log
 
-      - name: Build the catalog
+      - name: Unit and installer tests (as builder; includes the tamper, unknown-id, malformed and oversized cases)
         run: |
+          runuser -u builder -- env HOME=/home/builder node --test tests/generator.test.mjs tests/installer.test.mjs
+
+      - name: Put the full dry-run output in the job summary
+        if: always()
+        run: |
+          {
+            echo "## Installer dry run (debian:trixie, default build, full output)"
+            echo
+            echo '```text'
+            cat dry-run.log 2>/dev/null || echo "(no output: the dry run did not start)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Job B: every variant of waybar, foot, fuzzel, mako and swaybg runs under headless Sway (see smoke.yml).
+  tool-smoke:
+    uses: ./.github/workflows/smoke.yml
+
+  # On pull requests, the e2e job runs only when site/ or catalog/ changed. Pushes to main always run it.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.filter.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BASE" "$GITHUB_SHA" | grep -qE '^(site|catalog)/'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No site/ or catalog/ changes; skipping the wizard e2e."
+          fi
+
+  # Job D: the real installer on debian:trixie, then headless Sway on the installed config, with a screenshot.
+  full-install:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node and build the site and installer
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils
           npm ci
-          node scripts/validate.mjs
-          node scripts/build-catalog.mjs
+          npm run build
 
-      - name: Install the pinned default Nerd Font (checksum must match)
+      - name: Create a normal user with passwordless sudo (the installer refuses root and uses sudo for apt)
         run: |
-          eval "$(node scripts/ci-helpers.mjs font)"
-          url="https://github.com/ryanoasis/nerd-fonts/releases/download/${NERD_FONT_VERSION}/${NERD_FONT_ARCHIVE}"
-          curl -fsSL -o "/tmp/${NERD_FONT_ARCHIVE}" "$url"
-          echo "${NERD_FONT_SHA256}  /tmp/${NERD_FONT_ARCHIVE}" | sha256sum -c -
-          dest="/home/builder/.local/share/fonts/NerdFonts/${NERD_FONT_DEST}"
-          runuser -u builder -- mkdir -p "$dest"
-          runuser -u builder -- tar -xJf "/tmp/${NERD_FONT_ARCHIVE}" -C "$dest"
-          fc-cache -f /home/builder/.local/share/fonts
+          apt-get install -y --no-install-recommends sudo
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
+          chmod 440 /etc/sudoers.d/builder
+          chown -R builder "$GITHUB_WORKSPACE"
 
-      - name: Smoke test every Waybar variant on headless Sway
+      - name: Install and check the desktop, then screenshot it
         run: |
-          # Waybar needs a session D-Bus; dbus-run-session provides one for sway and waybar.
+          # The check needs grim and notify-send in the container; the installer installs the rest.
+          apt-get install -y --no-install-recommends sway xwayland grim libnotify-bin procps dbus-daemon dbus-user-session
           runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
-            dbus-run-session -- bash -c "cd '$GITHUB_WORKSPACE' && OUT='$GITHUB_WORKSPACE/smoke-out' bash scripts/smoke-waybar.sh"
+            dbus-run-session -- bash -c "cd '$GITHUB_WORKSPACE' && OUT='$GITHUB_WORKSPACE/full-install-out' bash scripts/full-install-check.sh"
 
-      - name: Upload screenshots and logs
+      - name: Add the check summary to the job summary
+        if: always()
+        run: |
+          if [ -f full-install-out/summary.md ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            cat full-install-out/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the screenshot and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: waybar-smoke
-          path: smoke-out/
+          name: full-install
+          path: full-install-out/
           if-no-files-found: warn
+
+  # Job F: every pinned Nerd Font archive matches its catalog sha256, and the installer falls back
+  # to fonts-font-awesome when the download fails.
+  font-check:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node and build the site and installer
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils
+          npm ci
+          npm run build
+
+      - name: Check the pinned Nerd Font sha256 values (downloads from github.com)
+        run: node scripts/check-fonts.mjs
+
+      - name: Normal user for the font test (the installer refuses root)
+        run: |
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+
+      - name: Test the font-awesome fallback when the download fails
+        run: |
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" bash scripts/test-font-fallback.sh
+
+  # Job G: each start method writes what it promises, in debian:trixie. Real login is not tested here:
+  # systemd is not running in the container, so a test-only systemctl shim records the enable call.
+  start-methods:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    strategy:
+      fail-fast: false
+      matrix:
+        method: [tty1, greetd]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node, sudo and python3 (for the TOML check)
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils sudo python3
+          npm ci
+          npm run build
+
+      - name: Normal user with passwordless sudo; systemctl shim (CI only, no systemd here)
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
+          chmod 440 /etc/sudoers.d/builder
+          printf '%s\n' '#!/bin/sh' 'echo "$@" >> /tmp/systemctl-shim.log' 'exit 0' > /usr/local/bin/systemctl
+          chmod 755 /usr/local/bin/systemctl
+          chown -R builder "$GITHUB_WORKSPACE"
+
+      - name: Run the installer with the ${{ matrix.method }} start method
+        run: |
+          CODE="$(node scripts/ci-helpers.mjs code ${{ matrix.method }})"
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" DESKWIZARD_TEST_MODE=1 \
+            DESKWIZARD_TEST_BASE_URL="file://$GITHUB_WORKSPACE/site/public/v1" \
+            bash "$GITHUB_WORKSPACE/site/public/v1/install.sh" --build "$CODE" 2>&1 | tee install.log
+
+      - name: Upload the installer log when a start method fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-log-${{ matrix.method }}
+          path: install.log
+          if-no-files-found: warn
+
+      - name: Assert what the start method wrote
+        run: |
+          set -eu
+          if [ "${{ matrix.method }}" = tty1 ]; then
+            grep -qx '# BEGIN deskwizard' /home/builder/.profile
+            grep -qx '# END deskwizard' /home/builder/.profile
+            grep -q 'exec sway' /home/builder/.profile
+            echo "ok: marked tty1 block in ~/.profile"
+          else
+            python3 -c 'import sys, tomllib; c = tomllib.load(open("/etc/greetd/config.toml", "rb")); cmd = c["default_session"]["command"]; assert "tuigreet" in cmd, cmd; assert c["terminal"]["vt"] == 1; print("ok: /etc/greetd/config.toml parses; command:", cmd)'
+            test -s /usr/share/wayland-sessions/sway.desktop || { echo 'missing sway session entry'; exit 1; }
+            echo "ok: sway session entry exists"
+            grep -q 'enable greetd.service' /tmp/systemctl-shim.log
+            echo "ok: greetd.service enable requested"
+          fi
 
   # Job C: click through the wizard in headless Chromium and save a screenshot per step.
   wizard-e2e:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

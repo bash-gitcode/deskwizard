@@ -1,0 +1,8 @@
+id: large
+name: Large text
+good_for:
+  - Low vision
+  - Easy to read
+requires:
+  - sway
+screenshot: screenshot.svg

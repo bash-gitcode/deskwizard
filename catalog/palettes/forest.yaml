@@ -1,0 +1,15 @@
+id: forest
+name: Forest Floor
+mode: dark
+default: false
+tokens:
+  bg: "#1b2420"
+  surface: "#26332d"
+  fg: "#d8e4dc"
+  muted: "#7d9185"
+  accent: "#7fc8a9"
+  accent2: "#e3b778"
+  warn: "#e5c07b"
+  error: "#e06c75"
+  font_ui: sans-serif
+  font_mono: monospace

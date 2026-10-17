@@ -1,0 +1,9 @@
+id: ridge
+name: Ridge
+good_for:
+  - Calm work
+  - Dark rooms
+requires:
+  - sway
+wallpaper: wallpaper.png
+screenshot: screenshot.svg

@@ -1,0 +1,8 @@
+id: center
+name: Top center
+good_for:
+  - Central alerts
+  - Wide screens
+requires:
+  - sway
+screenshot: screenshot.svg

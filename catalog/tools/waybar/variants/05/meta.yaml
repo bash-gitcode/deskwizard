@@ -4,12 +4,6 @@ good_for:
   - Mac-style bottom launcher feel
   - Large screens
   - Few, big targets for mouse users
-palette:
-  bg: "#2e3440"
-  fg: "#eceff4"
-  accent: "#88c0d0"
-  warn: "#ebcb8b"
-  crit: "#bf616a"
 requires:
   - sway
 options:

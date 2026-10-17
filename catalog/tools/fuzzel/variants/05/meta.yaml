@@ -1,0 +1,8 @@
+id: quiet
+name: Quiet
+good_for:
+  - Low distraction
+  - Minimal borders
+requires:
+  - sway
+screenshot: screenshot.svg

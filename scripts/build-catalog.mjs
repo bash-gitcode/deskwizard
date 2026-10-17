@@ -3,9 +3,9 @@
 // Config and style files are inlined so the browser and the installer need no extra fetches.
 // Screenshots are copied to site/public/catalog/. Every referenced file must exist.
 // Run with: npm run build-catalog
-import { existsSync, mkdirSync, writeFileSync, copyFileSync, rmSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, copyFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { ROOT, loadCatalog, readYaml, readText, rel } from "./lib/load.mjs";
+import { ROOT, CATALOG, loadCatalog, readYaml, readText, rel } from "./lib/load.mjs";
 
 const OUT_DIR = join(ROOT, "site", "public");
 const OUT_ASSETS = join(OUT_DIR, "catalog");
@@ -19,6 +19,12 @@ function requireFile(path, why) {
 const cat = loadCatalog();
 const distros = readYaml(cat.distrosPath);
 const fonts = readYaml(cat.fontsPath);
+const extras = readYaml(join(CATALOG, "extras.yaml"));
+const startMethods = readYaml(join(CATALOG, "start-methods.yaml"));
+const palettes = readdirSync(join(CATALOG, "palettes"))
+  .filter((n) => n.endsWith(".yaml"))
+  .sort()
+  .map((n) => readYaml(join(CATALOG, "palettes", n)));
 
 // Clean output so removed tools/variants do not linger in the site.
 rmSync(OUT_ASSETS, { recursive: true, force: true });
@@ -39,11 +45,12 @@ for (const tool of cat.tools) {
 
   const variants = [];
   for (const v of tool.variants) {
-    const meta = readYaml(join(v.path, "meta.yaml"));
-    const vfiles = {};
+    const meta = readYaml(join(v.path, "meta.yaml"));      const vfiles = {};
     for (const item of data.install ?? []) {
       if (item.from === "variant") {
-        vfiles[item.source] = readText(requireFile(join(v.path, item.source), `install source of ${data.id}/${meta.id}`));
+        const src = requireFile(join(v.path, item.source), `install source of ${data.id}/${meta.id}`);
+        // Binary files (wallpapers) are stored base64 so catalog.json stays plain text.
+        vfiles[item.source] = item.binary ? readFileSync(src).toString("base64") : readText(src);
       }
     }
     const shotSrc = requireFile(join(v.path, meta.screenshot), `screenshot of ${data.id}/${meta.id}`);
@@ -74,6 +81,11 @@ for (const tool of cat.tools) {
     display: data.display,
     works_with: data.works_with,
     requires: data.requires,
+    extras: data.extras ?? [],
+    recommends: data.recommends ?? [],
+    command: data.command ?? null,
+    autostart: data.autostart ?? [],
+    binds: data.binds ?? [],
     packages: data.packages,
     difficulty: data.difficulty,
     ram_mb: data.ram_mb,
@@ -98,6 +110,9 @@ const catalog = {
   catalog_version: catalogVersion,
   distros,
   fonts,
+  extras,
+  palettes,
+  start_methods: startMethods,
   tools: tools.sort((a, b) => a.display.order - b.display.order),
 };
 

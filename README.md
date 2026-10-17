@@ -29,7 +29,7 @@ The installer is served from `/v1/install.sh`. `/install.sh` at the site root is
 
 Runs on push to `main`, on every pull request, and on manual dispatch.
 
-- **Job A, `package-check`** (container `debian:trixie`): builds, checks that every apt package the catalog needs has a candidate in Debian 13 (`apt-cache policy`, fails on any missing one), runs the installer dry run as a non-root user, and runs `shellcheck -x` on the installer and `scripts/smoke-waybar.sh`.
+- **Job A, `package-check`** (container `debian:trixie`): builds, checks that every apt package the catalog needs has a candidate in Debian 13 (`apt-cache policy`, fails on any missing one), runs the installer dry run as a non-root user, and runs `shellcheck -x` on the installer and `scripts/smoke-tools.sh`.
 - **Job B, `waybar-variants`** (container `debian:trixie`): installs Sway, Waybar 0.12.0, grim, Font Awesome, fontconfig and the pinned Nerd Font (checksum checked). It starts headless Sway (1920x1080, pixman) and runs each Waybar variant for 5 s. It fails if the process exits or stderr contains `error` or `failed`. It lists warnings separately and saves a `grim` screenshot per variant. Uploads the `waybar-smoke` artifact.
 - **Job C, `wizard-e2e`** (Ubuntu runner): installs Playwright and headless Chromium in CI only (not a repo dependency). It clicks through Debian 13 > Wayland > Sway > Waybar > variant > Review, checks the badges, the one-liner (`/v1/install.sh`), Save/Load, and the old-catalog notice. Uploads the `wizard-e2e-screenshots` artifact, one screenshot per step.
 
@@ -41,7 +41,7 @@ Needs Docker or Podman. Run it as a non-root user inside the container:
 docker run --rm -v "$PWD":/work -w /work debian:trixie bash -c '
   apt-get update && apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils procps sway waybar grim fonts-font-awesome fontconfig &&
   useradd -m builder && chown -R builder /work &&
-  runuser -u builder -- env HOME=/home/builder PATH="$PATH" bash -c "npm ci && node scripts/validate.mjs && node scripts/build-catalog.mjs && OUT=/work/smoke-out bash scripts/smoke-waybar.sh"
+  runuser -u builder -- env HOME=/home/builder PATH="$PATH" bash -c "npm ci && node scripts/validate.mjs && node scripts/build-catalog.mjs && OUT=/work/smoke-out bash scripts/smoke-tools.sh"
 '
 ```
 
@@ -70,11 +70,12 @@ catalog/
 scripts/
   validate.mjs           schema + cross-reference checks
   build-catalog.mjs      catalog/ -> site/public/catalog.json
-  generate-install.mjs   state -> install.sh (same generator as the site)
+  generate-install.mjs   catalog -> v1/ (static install.sh, uninstall.sh, manifest.json, data files)
 site/
   index.html, src/        vanilla JS wizard (no UI framework)
-  src/generator.js        pure state -> plan -> script logic
-  src/installer.template.sh  the bash template
+  src/generator.js        pure state -> plan -> build code logic
+  src/installer.sh        static installer (reads the build code as data only)
+  src/uninstall.sh        restores the latest backups
 ```
 
 ## Add a variant in 5 minutes

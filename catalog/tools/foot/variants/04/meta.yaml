@@ -1,0 +1,8 @@
+id: underline
+name: Underline cursor
+good_for:
+  - Coding
+  - Keyboard-first use
+requires:
+  - sway
+screenshot: screenshot.svg

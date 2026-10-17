@@ -1,0 +1,8 @@
+id: bottom
+name: Bottom corner
+good_for:
+  - Out of the way
+  - Bottom-right habit
+requires:
+  - sway
+screenshot: screenshot.svg

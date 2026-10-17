@@ -1,0 +1,8 @@
+id: roomy
+name: Roomy
+good_for:
+  - Reading long output
+  - Big monitors
+requires:
+  - sway
+screenshot: screenshot.svg

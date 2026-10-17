@@ -1,0 +1,15 @@
+id: ember
+name: Ember
+mode: dark
+default: false
+tokens:
+  bg: "#1a1714"
+  surface: "#2a2521"
+  fg: "#efe6dc"
+  muted: "#8d8072"
+  accent: "#f08c3a"
+  accent2: "#d46a6a"
+  warn: "#f2c14e"
+  error: "#ff5c5c"
+  font_ui: sans-serif
+  font_mono: monospace

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="1440" viewBox="0 0 2560 1440">
+  <!-- Mono: dark diamond grid. Original drawing for deskwizard. -->
+  <defs>
+    <pattern id="grid" width="160" height="160" patternUnits="userSpaceOnUse">
+      <polygon points="80,20 140,80 80,140 20,80" fill="#2a2f3a"/>
+    </pattern>
+  </defs>
+  <rect width="2560" height="1440" fill="#15171c"/>
+  <rect width="2560" height="1440" fill="url(#grid)"/>
+</svg>

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "extra.schema.json",
+  "title": "Extra",
+  "type": "object",
+  "required": ["id", "name", "reason", "packages", "autostart", "binds"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "reason": { "type": "string", "minLength": 5 },
+    "packages": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z]+[0-9]*$": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.+-]*$" } }
+      }
+    },
+    "autostart": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "binds": { "$ref": "#/$defs/binds" }
+  },
+  "$defs": {
+    "binds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "command", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "command": { "type": "string", "minLength": 1 },
+          "label": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

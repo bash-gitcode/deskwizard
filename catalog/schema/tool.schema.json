@@ -11,7 +11,7 @@
   "properties": {
     "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
     "name": { "type": "string", "minLength": 1 },
-    "type": { "enum": ["compositor", "bar"] },
+    "type": { "enum": ["compositor", "bar", "terminal", "launcher", "notifications", "wallpaper"] },
     "description": { "type": "string", "minLength": 10 },
     "needed": { "enum": ["required", "recommended", "optional"] },
     "needed_reason": { "type": "string", "minLength": 5 },
@@ -36,6 +36,23 @@
     "difficulty": { "enum": ["easy", "medium", "hard"] },
     "ram_mb": { "type": "integer", "minimum": 0 },
     "default_variant": { "type": ["string", "null"] },
+    "command": { "type": ["string", "null"] },
+    "extras": { "type": "array", "items": { "type": "string" } },
+    "recommends": { "type": "array", "items": { "type": "string" } },
+    "autostart": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "binds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "command", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "command": { "type": "string", "minLength": 1 },
+          "label": { "type": ["string", "null"] }
+        }
+      }
+    },
     "install": {
       "type": "array",
       "items": {
@@ -45,7 +62,8 @@
         "properties": {
           "target": { "type": "string", "pattern": "^~/" },
           "from": { "enum": ["tool", "variant"] },
-          "source": { "type": "string", "minLength": 1 }
+          "source": { "type": "string", "minLength": 1 },
+          "binary": { "type": "boolean" }
         }
       }
     }

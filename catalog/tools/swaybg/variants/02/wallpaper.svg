@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="1440" viewBox="0 0 2560 1440">
+  <!-- Ridge: teal gradient with diagonal bands. Original drawing for deskwizard. -->
+  <defs>
+    <linearGradient id="teal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b3d2e"/>
+      <stop offset="1" stop-color="#1b5e4a"/>
+    </linearGradient>
+    <pattern id="bands" width="280" height="280" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect x="0" y="0" width="140" height="280" fill="#000000" fill-opacity="0.12"/>
+    </pattern>
+  </defs>
+  <rect width="2560" height="1440" fill="url(#teal)"/>
+  <rect width="2560" height="1440" fill="url(#bands)"/>
+</svg>

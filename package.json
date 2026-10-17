@@ -9,16 +9,19 @@
     "node": ">=20"
   },
   "scripts": {
+    "render-wallpapers": "node scripts/render-wallpapers.mjs",
     "validate": "node scripts/validate.mjs",
+    "check-secrets": "node scripts/check-secrets.mjs",
     "build-catalog": "node scripts/build-catalog.mjs",
     "generate-install": "node scripts/generate-install.mjs",
     "dev": "vite --config vite.config.js",
-    "build": "node scripts/validate.mjs && node scripts/build-catalog.mjs && node scripts/generate-install.mjs && vite build --config vite.config.js"
+    "build": "node scripts/render-wallpapers.mjs && node scripts/validate.mjs && node scripts/build-catalog.mjs && node scripts/generate-install.mjs && vite build --config vite.config.js"
   },
   "dependencies": {
     "yaml": "^2.5.0"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "2.6.2",
     "ajv": "^8.17.1",
     "vite": "^5.4.0"
   }

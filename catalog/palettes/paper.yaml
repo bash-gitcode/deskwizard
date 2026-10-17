@@ -1,0 +1,15 @@
+id: paper
+name: Paper
+mode: light
+default: false
+tokens:
+  bg: "#f5f2ea"
+  surface: "#e6e0d2"
+  fg: "#2b2a33"
+  muted: "#6e6a78"
+  accent: "#2d6cdf"
+  accent2: "#7a4fbf"
+  warn: "#b36b00"
+  error: "#c0392b"
+  font_ui: sans-serif
+  font_mono: monospace

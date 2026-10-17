@@ -1,0 +1,8 @@
+id: soft
+name: Soft
+good_for:
+  - Low glare
+  - Long sessions
+requires:
+  - sway
+screenshot: screenshot.svg

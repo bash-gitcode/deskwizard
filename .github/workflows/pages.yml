@@ -15,7 +15,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Every catalog variant must start on headless Sway before the site is published.
+  smoke:
+    uses: ./.github/workflows/smoke.yml
+
   build:
+    needs: smoke
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +29,15 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Download the smoke screenshots
+        uses: actions/download-artifact@v4
+        with:
+          name: tool-smoke
+          path: smoke-out
+      # The copy step reads the variant list from the catalog, so build it first.
+      - run: npm run -s build-catalog
+      # Fails if any variant's screenshot is missing.
+      - run: node scripts/copy-screenshots.mjs smoke-out
       # Runs validate, build-catalog, generate-install (install.sh) and the Vite build.
       - run: npm run build
       - run: test -s dist/install.sh && test -s dist/catalog.json

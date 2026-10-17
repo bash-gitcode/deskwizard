@@ -49,6 +49,22 @@ async function main() {
   const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
   const next = () => page.getByRole("button", { name: "Next", exact: true }).click();
+  // Press Next until the named step heading shows. Optional add-on tools sit between Waybar and Review.
+  async function toStep(name) {
+    for (let i = 0; i < 15; i++) {
+      if (await page.getByRole("heading", { name }).isVisible()) return;
+      await next();
+    }
+    throw new Error(`step "${name}" never appeared`);
+  }
+  // The add-on tools come before Waybar (terminal, launcher). Skip them with Next until the Waybar page shows.
+  const toWaybar = async () => {
+    for (let i = 0; i < 6; i++) {
+      const here = await page.getByRole("heading", { name: "Waybar" }).waitFor({ timeout: 1000 }).then(() => true, () => false);
+      if (here) return;
+      await next();
+    }
+  };
 
   // 1. Distro
   await page.goto(base);
@@ -64,15 +80,33 @@ async function main() {
 
   // 3. Compositor: Sway
   await page.getByRole("button", { name: "Use this" }).first().click();
+  // Sway tiers: portal and polkit are required (Included, no button); screenshots is recommended (Add); media keys is optional (no prompt).
+  check(await page.getByText("Included: Desktop portal (needed because Sway)").isVisible(), "Sway shows the required portal as Included");
+  check(await page.getByText("Included: Polkit agent (needed because Sway)").isVisible(), "Sway shows the required polkit agent as Included");
+  const recommended = page.getByRole("listitem").filter({ hasText: "Also recommended: Screenshots" });
+  check(await recommended.getByRole("button", { name: "Add" }).isVisible(), "Sway offers screenshots as Also recommended, with Add");
+  check((await page.getByText("Volume and brightness keys").count()) === 0, "optional media keys are not prompted");
   await shot(page, "compositor");
+  await recommended.getByRole("button", { name: "Add" }).click();
+  check(await page.getByText("Screenshots (grim and slurp) is in your build").isVisible(), "accepted screenshots shows 'is in your build'");
   await next();
 
-  // 4. Font: Font Awesome only, so Waybar must ask for the Nerd Font
+  // 4. Palette: pick a different palette; the swatch strip shows its colors
+  await page.getByRole("heading", { name: "Palette" }).waitFor();
+  const paletteRadios = page.locator("input[name=palette]");
+  check((await paletteRadios.count()) >= 2, "palette step lists at least two palettes");
+  await paletteRadios.nth(1).check();
+  check((await page.locator(".swatches").first().locator(".swatch").count()) === 8, "the selected palette shows its 8 color swatches");
+  await shot(page, "palette");
+  await next();
+
+  // 5. Font: Font Awesome only, so Waybar must ask for the Nerd Font
   await page.getByRole("radio", { name: /Font Awesome only/ }).check();
   await shot(page, "font");
   await next();
 
   // 5. Waybar: pick a variant, expect the Nerd Font prompt
+  await toWaybar();
   await page.getByRole("heading", { name: "Waybar" }).waitFor();
   const variantCards = page.locator(".variant");
   const variantCount = await variantCards.count();
@@ -90,10 +124,16 @@ async function main() {
   await variantCards.first().getByRole("button", { name: "Use this" }).click();
   check(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible(), "'Also needs: Nerd Font' appears with Font Awesome only");
   check(await page.locator(".badge[class*='needed-']").first().isVisible(), "needed badge is visible");
+  check((await page.locator("ol.stepper li").count()) === 12, "stepper lists 12 steps: distro, display, compositor, palette, font, 5 tools, start method, review");
   await shot(page, "waybar-variant");
   await page.getByRole("listitem").filter({ hasText: "Also needs: Nerd Font" }).getByRole("button", { name: "Add" }).click();
   check(!(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible()), "Nerd Font prompt goes away after Add");
   await shot(page, "waybar-font-added");
+  // Start method: pick auto-start on tty1, so the Save/Load round trip checks start_method too.
+  await toStep("Start method");
+  await page.getByRole("radio", { name: /Auto-start on the first console/ }).check();
+  check(await page.getByRole("radio", { name: /Auto-start on the first console/ }).isChecked(), "tty1 start method is selectable");
+  await shot(page, "start-method");
   await next();
 
   // 6. Review
@@ -101,6 +141,12 @@ async function main() {
   const line = page.getByRole("textbox", { name: "Install command" });
   const oneLiner = await line.inputValue();
   check(oneLiner.includes("/v1/install.sh"), "one-liner uses /v1/install.sh");
+  check(/ \| bash -s -- --build [A-Za-z0-9_-]+$/.test(oneLiner), "one-liner passes the build code with --build and no script");
+  check(!oneLiner.includes("--script"), "one-liner does not use the old --script bootstrap");
+  await page.getByText(/^sha256 of install\.sh: [0-9a-f]{64}$/).waitFor({ timeout: 10000 }).then(
+    () => check(true, "Review shows the sha256 of install.sh"),
+    () => check(false, "Review shows the sha256 of install.sh")
+  );
   await shot(page, "review");
 
   // Save, then Start over, then Load: the same build comes back
@@ -116,11 +162,12 @@ async function main() {
   await next();
   await page.getByRole("button", { name: "Use this" }).first().click();
   await next();
+  await next();
   await page.getByRole("radio", { name: /Font Awesome only/ }).check();
   await next();
+  await toWaybar();
   await page.getByRole("button", { name: "Use this" }).first().click();
-  await next();
-  await page.getByRole("heading", { name: "Review" }).waitFor();
+  await toStep("Review");
   check((await page.getByRole("textbox", { name: "Install command" }).inputValue()) !== oneLiner, "rebuilt build differs before Load");
   await page.locator("#load-build").setInputFiles(saved);
   await page.getByRole("heading", { name: "Review" }).waitFor();

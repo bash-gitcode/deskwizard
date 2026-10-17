@@ -1,0 +1,8 @@
+id: compact
+name: Compact
+good_for:
+  - Small screens
+  - Square corners
+requires:
+  - sway
+screenshot: screenshot.svg

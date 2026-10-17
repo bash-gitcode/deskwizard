@@ -1,0 +1,15 @@
+id: midnight
+name: Midnight Ink
+mode: dark
+default: true
+tokens:
+  bg: "#1e1e2e"
+  surface: "#313244"
+  fg: "#cdd6f4"
+  muted: "#6c7086"
+  accent: "#89b4fa"
+  accent2: "#cba6f7"
+  warn: "#f9e2af"
+  error: "#f38ba8"
+  font_ui: sans-serif
+  font_mono: monospace

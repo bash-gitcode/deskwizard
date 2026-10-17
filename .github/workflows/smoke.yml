@@ -1,0 +1,82 @@
+name: tool-smoke
+
+# Reusable: called by ci.yml (every PR and push) and pages.yml (before the site is built).
+# Every variant of waybar, foot, fuzzel, mako and swaybg starts under headless Sway, stays up
+# for 5 s, and is screenshotted. Screenshots and logs are uploaded as the "tool-smoke" artifact.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  tool-smoke:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node and build the catalog
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates
+          npm ci
+          npm run -s render-wallpapers
+          node scripts/validate.mjs
+          node scripts/build-catalog.mjs
+
+      - name: Install Sway and every catalog tool package (from the catalog, not a fixed list)
+        run: |
+          apt-get install -y --no-install-recommends sway xwayland grim procps curl xz-utils \
+            fontconfig dbus-daemon dbus-user-session $(node scripts/ci-helpers.mjs packages)
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+
+      - name: Confirm the empty-window selector from the installed Waybar man page
+        run: |
+          # Read the man pages that ship with the packaged Waybar, not a guess. Fails if the page
+          # does not describe an empty state for sway/window, so the CSS cannot rely on a guess.
+          apt-get install -y --no-install-recommends man-db groff-base >/dev/null
+          man_dir=/usr/share/man
+          page="$(ls "$man_dir"/man5/waybar-sway-window.5* 2>/dev/null | head -n1)"
+          [ -n "$page" ] || { echo "no waybar-sway-window man page in the installed package"; exit 1; }
+          text="$(man -P cat -l "$page")"
+          {
+            echo "## Waybar sway/window man page (installed in debian:trixie)"
+            echo '```'
+            printf '%s\n' "$text" | grep -inE 'empty|format|class|sway/window' | head -n 40
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
+          printf '%s\n' "$text" | grep -inE 'empty' || { echo "the man page does not describe an empty state"; exit 1; }
+
+      - name: Install the pinned default Nerd Font (checksum must match)
+        run: |
+          eval "$(node scripts/ci-helpers.mjs font)"
+          url="https://github.com/ryanoasis/nerd-fonts/releases/download/${NERD_FONT_VERSION}/${NERD_FONT_ARCHIVE}"
+          curl -fsSL -o "/tmp/${NERD_FONT_ARCHIVE}" "$url"
+          echo "${NERD_FONT_SHA256}  /tmp/${NERD_FONT_ARCHIVE}" | sha256sum -c -
+          dest="/home/builder/.local/share/fonts/NerdFonts/${NERD_FONT_DEST}"
+          runuser -u builder -- mkdir -p "$dest"
+          runuser -u builder -- tar -xJf "/tmp/${NERD_FONT_ARCHIVE}" -C "$dest"
+          fc-cache -f /home/builder/.local/share/fonts
+
+      - name: Smoke test every variant of the five tools on headless Sway
+        run: |
+          # Tools need a session D-Bus; dbus-run-session provides one for sway and the tools.
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
+            dbus-run-session -- bash -c "cd '$GITHUB_WORKSPACE' && OUT='$GITHUB_WORKSPACE/smoke-out' bash scripts/smoke-tools.sh"
+
+      - name: Add the smoke summary to the job summary
+        if: always()
+        run: |
+          if [ -f smoke-out/summary.md ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            cat smoke-out/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tool-smoke
+          path: smoke-out/
+          if-no-files-found: warn

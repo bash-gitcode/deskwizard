@@ -1,11 +1,11 @@
 /* deskwizard variant 02: pills.
  * Palette colors are @define-color names (GTK CSS has no var()).
  * Only the lines below may contain color literals. */
-@define-color bg #282a36;
-@define-color fg #f8f8f2;
-@define-color accent #bd93f9;
-@define-color warn #f1fa8c;
-@define-color crit #ff5555;
+@define-color bg $bg;
+@define-color fg $fg;
+@define-color accent $accent;
+@define-color warn $warn;
+@define-color crit $error;
 
 * {
   font-family: "{{NERD_FONT}}", "FontAwesome", sans-serif;
@@ -48,6 +48,14 @@ window#waybar {
 #workspaces button.urgent {
   background: @crit;
   color: @bg;
+}
+
+/* No window open: the window module has no box (window#waybar.empty is the selector in the Waybar
+   sway/window man page). */
+window#waybar.empty #window {
+  background: transparent;
+  padding: 0;
+  margin: 0;
 }
 
 #battery.warning {
