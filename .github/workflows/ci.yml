@@ -98,6 +98,10 @@ jobs:
             DESKWIZARD_TEST_BASE_URL="file://$GITHUB_WORKSPACE/site/public/v1" \
             bash "$GITHUB_WORKSPACE/site/public/v1/install.sh" --build "$CODE" --dry-run 2>&1 | tee dry-run.log
 
+      - name: Unit and installer tests (as builder; includes the tamper, unknown-id, malformed and oversized cases)
+        run: |
+          runuser -u builder -- env HOME=/home/builder node --test tests/generator.test.mjs tests/installer.test.mjs
+
       - name: Put the full dry-run output in the job summary
         if: always()
         run: |
