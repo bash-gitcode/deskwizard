@@ -86,7 +86,8 @@ export WAYLAND_DISPLAY="${WL_SOCK##*/}" GDK_BACKEND=wayland
 # Float the terminal so the wallpaper and bar stay visible around it.
 swaymsg 'for_window [app_id="foot"] floating enable, resize set width 900 px height 500 px, move position center' >/dev/null
 swaymsg exec foot >/dev/null
-notify-send "deskwizard" "Full install check: notifications work" 2>> "$OUT/notify.log" || fail=1
+# -t 60000: a mako variant may expire notifications after 3-6 s, before the screenshot.
+notify-send -t 60000 "deskwizard" "Full install check: notifications work" 2>> "$OUT/notify.log" || fail=1
 
 # 5. Wait 10 s, then screenshot the whole screen.
 sleep 10
