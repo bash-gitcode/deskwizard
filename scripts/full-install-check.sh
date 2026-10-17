@@ -95,11 +95,11 @@ sleep 10
 {
   echo "== makoctl version / list / history (diagnostics)"
   echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unset}"
-  makoctl --version 2>&1 || true
   echo "-- list"; makoctl list 2>&1 || true
   echo "-- history"; makoctl history 2>&1 || true
 } >> "$OUT/notify.log"
-if makoctl list 2>> "$OUT/notify.log" | grep -q "notifications work"; then
+# mako's list shows the summary and app name, not the body, so match the summary.
+if makoctl list 2>> "$OUT/notify.log" | grep -q "Notification [0-9]*: deskwizard"; then
   note "- mako shows the check notification: PASS"
 else
   note "- mako shows the check notification: FAIL (see notify.log)"
