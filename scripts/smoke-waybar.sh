@@ -40,6 +40,17 @@ WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman LIBSEAT_BACK
   sway -V -c "$SWAY_CFG" > "$OUT/sway.log" 2>&1 &
 SWAY_PID=$!
 
+# Sway creates its sockets under XDG_RUNTIME_DIR and does not export them to this shell,
+# so set SWAYSOCK (for swaymsg) and WAYLAND_DISPLAY (for waybar and grim) here.
+uid="$(id -u)"
+export SWAYSOCK="$XDG_RUNTIME_DIR/sway-ipc.$uid.$SWAY_PID.sock"
+WL_SOCK=""
+for s in "$XDG_RUNTIME_DIR"/wayland-*; do
+  case "$s" in *.lock) ;; *) WL_SOCK="$s" ;; esac
+done
+wl_name="${WL_SOCK##*/}"
+export WAYLAND_DISPLAY="$wl_name"
+
 # Wait up to 30 s for the IPC socket to answer.
 ready=false
 for _ in $(seq 1 30); do
