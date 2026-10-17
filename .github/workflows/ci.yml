@@ -74,33 +74,34 @@ jobs:
           chown -R builder /tmp/deskwizard
           runuser -u builder -- bash /tmp/deskwizard/site/public/v1/install.sh --dry-run
 
-      - name: shellcheck -x on the generated installer and the smoke script
+      - name: shellcheck -x on the generated installer and the smoke scripts
         run: |
           shellcheck -x site/public/v1/install.sh
-          shellcheck -x scripts/smoke-waybar.sh
+          shellcheck -x scripts/smoke-tools.sh
 
-  # Job B: each Waybar variant starts under headless Sway, stays up for 5 s, and is screenshotted.
-  waybar-variants:
+  # Job B: every variant of waybar, foot, fuzzel, mako and swaybg starts under headless Sway,
+  # stays up for 5 s, and is screenshotted. The files are the ones the installer writes.
+  tool-smoke:
     runs-on: ubuntu-latest
     container: debian:trixie
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Sway, Waybar and the pinned fonts
+      - name: Install Node and build the catalog
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends \
-            nodejs npm ca-certificates curl xz-utils procps \
-            sway xwayland waybar grim fonts-font-awesome fontconfig dbus-daemon dbus-user-session
-          useradd -m builder
-          chown -R builder "$GITHUB_WORKSPACE"
-
-      - name: Build the catalog
-        run: |
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates
           npm ci
-          node scripts/render-wallpapers.mjs
+          npm run -s render-wallpapers
           node scripts/validate.mjs
           node scripts/build-catalog.mjs
+
+      - name: Install Sway and every catalog tool package (from the catalog, not a fixed list)
+        run: |
+          apt-get install -y --no-install-recommends sway xwayland grim procps curl xz-utils \
+            fontconfig dbus-daemon dbus-user-session $(node scripts/ci-helpers.mjs packages)
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
 
       - name: Install the pinned default Nerd Font (checksum must match)
         run: |
@@ -113,17 +114,24 @@ jobs:
           runuser -u builder -- tar -xJf "/tmp/${NERD_FONT_ARCHIVE}" -C "$dest"
           fc-cache -f /home/builder/.local/share/fonts
 
-      - name: Smoke test every Waybar variant on headless Sway
+      - name: Smoke test every variant of the five tools on headless Sway
         run: |
-          # Waybar needs a session D-Bus; dbus-run-session provides one for sway and waybar.
+          # Tools need a session D-Bus; dbus-run-session provides one for sway and the tools.
           runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
-            dbus-run-session -- bash -c "cd '$GITHUB_WORKSPACE' && OUT='$GITHUB_WORKSPACE/smoke-out' bash scripts/smoke-waybar.sh"
+            dbus-run-session -- bash -c "cd '$GITHUB_WORKSPACE' && OUT='$GITHUB_WORKSPACE/smoke-out' bash scripts/smoke-tools.sh"
+
+      - name: Add the smoke summary to the job summary
+        if: always()
+        run: |
+          if [ -f smoke-out/summary.md ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            cat smoke-out/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload screenshots and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: waybar-smoke
+          name: tool-smoke
           path: smoke-out/
           if-no-files-found: warn
 
