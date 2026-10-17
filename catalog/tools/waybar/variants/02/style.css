@@ -50,6 +50,14 @@ window#waybar {
   color: @bg;
 }
 
+/* No window open: the window module has no box (window#waybar.empty is the selector in the Waybar
+   sway/window man page). */
+window#waybar.empty #window {
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
 #battery.warning {
   color: @warn;
 }

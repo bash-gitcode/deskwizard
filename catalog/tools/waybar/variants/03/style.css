@@ -50,6 +50,13 @@ window#waybar {
   background: @accent;
 }
 
+/* No window open: the window module has no box (window#waybar.empty is the selector in the Waybar
+   sway/window man page). */
+window#waybar.empty #window {
+  background: transparent;
+  padding: 0;
+}
+
 #clock {
   background: @fg;
   color: @bg;
