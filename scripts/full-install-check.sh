@@ -83,11 +83,27 @@ done
 export WAYLAND_DISPLAY="${WL_SOCK##*/}" GDK_BACKEND=wayland
 
 # 4. The config autostarts the bar, notifications and wallpaper. Add a notification and a terminal.
+# Float the terminal so the wallpaper and bar stay visible around it.
+swaymsg 'for_window [app_id="foot"] floating enable, resize set width 900 px height 500 px, move position center' >/dev/null
 swaymsg exec foot >/dev/null
 notify-send "deskwizard" "Full install check: notifications work" 2>> "$OUT/notify.log" || fail=1
 
 # 5. Wait 10 s, then screenshot the whole screen.
 sleep 10
+# The notification must be known to mako, not only sent.
+if makoctl list 2>> "$OUT/notify.log" | grep -q "notifications work"; then
+  note "- mako shows the check notification: PASS"
+else
+  note "- mako shows the check notification: FAIL (see notify.log)"
+  fail=1
+fi
+# lxpolkit (the polkit agent the config starts) shows an error dialog in a container without a logind session.
+# Close only that dialog so it does not cover the screenshot, and log it in the summary.
+if swaymsg -t get_tree | grep -q '"app_id": "lxpolkit"'; then
+  note "- ignored: lxpolkit error dialog (no logind session in the container) closed before the screenshot"
+  swaymsg '[app_id="lxpolkit"] kill' >/dev/null 2>&1 || true
+  sleep 1
+fi
 grim "$OUT/full-install.png" 2>> "$OUT/grim.log" || fail=1
 
 # 6. Every desktop program the config starts must still be running.
