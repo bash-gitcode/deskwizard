@@ -5,7 +5,7 @@
 #   1. copy its config.jsonc and style.css into ~/.config/waybar
 #   2. start waybar on a headless Sway session (1920x1080)
 #   3. wait 5 seconds and assert waybar is still running
-#   4. FAIL the variant if its stderr has a line with "error" or "failed"
+#   4. FAIL the variant if its log has a Waybar error line ([error], "failed to", "fatal")
 #   5. list lines with "warn" separately (they do not fail the run)
 #   6. save a screenshot with grim
 # Outputs go to $OUT (default: ./smoke-out): <variant>.png, <variant>.log, sway.log, summary.txt.
@@ -100,7 +100,8 @@ for vdir in "$VARIANTS"/*/; do
     status="FAIL"
     reasons="waybar exited within ${RUN_SECONDS}s"
   fi
-  if grep -iE 'error|failed' "$log" > "$OUT/$label.errors" 2>/dev/null && [ -s "$OUT/$label.errors" ]; then
+  # Match Waybar's own error lines. GTK's AT-SPI "Error retrieving accessibility bus" message is harmless here.
+  if grep -iE '\[error\]|failed to|fatal' "$log" > "$OUT/$label.errors" 2>/dev/null && [ -s "$OUT/$label.errors" ]; then
     status="FAIL"
     reasons="${reasons:+$reasons; }error lines in log"
   fi
