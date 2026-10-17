@@ -62,4 +62,5 @@ else
 fi
 
 if [ "$fail" -eq 0 ]; then note "**conffile check passed.**"; else note "**conffile check failed.** See install-greetd.log."; fi
+if [ "$fail" -ne 0 ]; then echo "===== install-greetd.log (last 120 lines) ====="; tail -n 120 "$OUT/install-greetd.log"; fi
 exit "$fail"

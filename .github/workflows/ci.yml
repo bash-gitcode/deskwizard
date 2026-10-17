@@ -225,14 +225,20 @@ jobs:
             if [ -f "$s" ]; then cat "$s" >> "$GITHUB_STEP_SUMMARY"; fi
           done
 
-      - name: Upload the logs
+      - name: Upload the conffile logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: conffile-logs
+          path: conffile-out/
+          if-no-files-found: warn
+
+      - name: Upload the uninstall logs
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: uninstall-logs
-          path: |
-            conffile-out/
-            uninstall-out/
+          path: uninstall-out/
           if-no-files-found: warn
 
   # Job F: every pinned Nerd Font archive matches its catalog sha256, and the installer falls back

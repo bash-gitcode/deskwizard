@@ -84,4 +84,12 @@ else
 fi
 
 if [ "$fail" -eq 0 ]; then note "**uninstall check passed.**"; else note "**uninstall check failed.** See uninstall.log."; fi
+# On failure, print the install logs into the job log too (the artifact is only a fallback).
+if [ "$fail" -ne 0 ]; then
+  for f in install-tty1.log install-greetd.log uninstall.log; do
+    [ -f "$OUT/$f" ] || continue
+    echo "===== $f (last 80 lines) ====="
+    tail -n 80 "$OUT/$f"
+  done
+fi
 exit "$fail"
