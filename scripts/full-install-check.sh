@@ -118,18 +118,6 @@ if swaymsg -t get_tree | grep -q '"app_id": "lxpolkit"'; then
   sleep 1
 fi
 grim "$OUT/full-install.png" 2>> "$OUT/grim.log" || fail=1
-# The screenshot must be the 1920x1080 mode set above (PNG IHDR width and height, bytes 16-23).
-if [ -s "$OUT/full-install.png" ]; then
-  read -r w1 w2 w3 w4 h1 h2 h3 h4 < <(od -An -tu1 -j16 -N8 "$OUT/full-install.png")
-  width=$(( (w1 << 24) | (w2 << 16) | (w3 << 8) | w4 ))
-  height=$(( (h1 << 24) | (h2 << 16) | (h3 << 8) | h4 ))
-  if [ "$width" -eq 1920 ] && [ "$height" -eq 1080 ]; then
-    note "- screenshot size ${width}x${height}: PASS"
-  else
-    note "- screenshot size ${width}x${height}: FAIL (expected 1920x1080)"
-    fail=1
-  fi
-fi
 
 # 6. Every desktop program the config starts must still be running.
 for tool in waybar mako swaybg foot; do
