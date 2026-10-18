@@ -116,6 +116,16 @@ summary="$OUT/summary.md"
 failed=0
 ignored_all="$OUT/ignored.txt"
 : > "$ignored_all"
+# One line per retry (see the retry rules below). More than 2 in one run fails the job.
+retries_log="$OUT/retries.txt"
+: > "$retries_log"
+
+# Stop a client and wait until it is gone, so the next attempt connects to a clean compositor.
+teardown_client() { # teardown_client TOOL PID
+  pkill -x "$1" 2>/dev/null || true
+  if [ -n "$2" ]; then kill "$2" 2>/dev/null || true; wait "$2" 2>/dev/null || true; fi
+  for _ in $(seq 1 10); do pgrep -x "$1" >/dev/null 2>&1 || break; sleep 1; done
+}
 
 mapfile -t VARIANTS < <(node "$ROOT/scripts/smoke-stage.mjs" list)
 [ "${#VARIANTS[@]}" -gt 0 ] || { echo "smoke-tools: no variants found (run build-catalog first)" >&2; exit 1; }
@@ -135,61 +145,86 @@ for entry in "${VARIANTS[@]}"; do
   fi
   cp -r "$stage"/. "$HOME"/
 
-  if ! wait_for_sway; then
-    echo "| $label | FAIL | - | - | sway not ready before launch |" >> "$summary"
-    failed=$((failed + 1))
-    continue
-  fi
-  launch "$tool" > "$log" 2>&1 &
-  pid=$!
-  sleep "$RUN_SECONDS"
+  # Retry rule: each variant gets at most one retry (2 attempts). Every retry is logged as a warning
+  # (job annotation and job summary). The job fails if a run needs more than 2 retries in total.
+  attempt=1
+  while :; do
+    status="PASS"
+    notes=""
+    pid=""
+    if ! wait_for_sway; then
+      status="FAIL"
+      notes="sway not ready before launch"
+      : > "$log"
+      : > "$OUT/$label.ignored"
+    else
+      launch "$tool" > "$log" 2>&1 &
+      pid=$!
+      sleep "$RUN_SECONDS"
+      if ! pgrep -x "$tool" >/dev/null 2>&1; then
+        status="FAIL"
+        notes="$tool exited within ${RUN_SECONDS}s"
+      fi
+      grep -iE "$ERR_RE" "$log" > "$OUT/$label.matched" || true
+      grep -viE "$IGNORE_RE" "$OUT/$label.matched" > "$OUT/$label.errors" || true
+      grep -iE "$IGNORE_RE" "$OUT/$label.matched" > "$OUT/$label.ignored" || true
+      if [ -s "$OUT/$label.errors" ]; then
+        status="FAIL"
+        notes="${notes:+$notes; }error lines in log"
+      fi
+      if [ "$status" = PASS ]; then
+        grim "$OUT/$label.png" || { status="FAIL"; notes="${notes:+$notes; }grim could not take a screenshot"; }
+      fi
+    fi
 
-  status="PASS"
-  notes=""
-  if ! pgrep -x "$tool" >/dev/null 2>&1; then
-    status="FAIL"
-    notes="$tool exited within ${RUN_SECONDS}s"
-  fi
+    [ "$status" = FAIL ] || break
+    [ "$attempt" -lt 2 ] || break
 
-  grep -iE "$ERR_RE" "$log" > "$OUT/$label.matched" || true
-  grep -viE "$IGNORE_RE" "$OUT/$label.matched" > "$OUT/$label.errors" || true
-  grep -iE "$IGNORE_RE" "$OUT/$label.matched" > "$OUT/$label.ignored" || true
-  if [ -s "$OUT/$label.errors" ]; then
-    status="FAIL"
-    notes="${notes:+$notes; }error lines in log"
-  fi
-  # Every ignored line goes to the summary, with its variant, so it is never silently dropped.
-  sed "s/^/$label: /" "$OUT/$label.ignored" >> "$ignored_all"
-
-  if [ "$status" = PASS ]; then
-    grim "$OUT/$label.png" || { status="FAIL"; notes="${notes:+$notes; }grim could not take a screenshot"; }
-  fi
+    # Keep the failed attempt's evidence, then retry once with a fresh client.
+    cp "$log" "$OUT/$label.attempt$attempt.log" 2>/dev/null || true
+    ls -la "$XDG_RUNTIME_DIR" > "$OUT/$label.attempt$attempt.runtime-ls.txt" 2>&1
+    tail -n 80 "$OUT/sway.log" > "$OUT/$label.attempt$attempt.sway-tail.txt"
+    msg="$label: attempt $attempt FAILED ($notes); retrying once"
+    echo "$msg" >> "$retries_log"
+    echo "::warning title=Smoke retry::$msg"
+    teardown_client "$tool" "$pid"
+    attempt=$((attempt + 1))
+  done
 
   # On failure keep what a diagnosis needs: the runtime dir listing and the end of the sway log.
   if [ "$status" = FAIL ]; then
     ls -la "$XDG_RUNTIME_DIR" > "$OUT/$label.runtime-ls.txt" 2>&1
     tail -n 80 "$OUT/sway.log" > "$OUT/$label.sway-tail.txt"
   fi
+  if [ "$attempt" -gt 1 ]; then
+    notes="${notes:+$notes; }retried once"
+  fi
 
+  # Every ignored line goes to the summary, with its variant, so it is never silently dropped.
+  sed "s/^/$label: /" "$OUT/$label.ignored" >> "$ignored_all"
   grep -i 'warn' "$log" > "$OUT/$label.warnings" || true
   warnings="$(wc -l < "$OUT/$label.warnings")"
   ignored="$(wc -l < "$OUT/$label.ignored")"
   echo "| $label | $status | $warnings | $ignored | ${notes:-ok} |" >> "$summary"
   echo "$label: $status${notes:+ ($notes)}; warnings: $warnings; ignored: $ignored"
 
-  pkill -x "$tool" 2>/dev/null || true
-  kill "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
-  # Let the client close its Wayland connection before the next variant connects. Starting the
-  # next client while this one is still tearing down made the next fuzzel fail in CI.
-  for _ in $(seq 1 10); do pgrep -x "$tool" >/dev/null 2>&1 || break; sleep 1; done
+  teardown_client "$tool" "$pid"
   [ "$status" = PASS ] || failed=$((failed + 1))
 done
+
+retries_total="$(wc -l < "$retries_log")"
+if [ "$retries_total" -gt 2 ]; then
+  echo "smoke-tools: $retries_total retries in one run (limit is 2); failing the job" >&2
+  failed=$((failed + 1))
+fi
 
 {
   echo
   echo "### Ignored log lines (expected in a container, not failures)"
   if [ -s "$ignored_all" ]; then sed 's/^/- /' "$ignored_all"; else echo "- none"; fi
+  echo
+  echo "### Retries (warnings; limit 2 per run, more than 2 fails the job)"
+  if [ -s "$retries_log" ]; then sed 's/^/- WARNING: /' "$retries_log"; else echo "- none"; fi
   echo
   echo "### Warning lines (not failures)"
   for w in "$OUT"/*.warnings; do
