@@ -9,6 +9,11 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${OUT:-$ROOT/smoke-out}"
 REPEAT="${REPEAT:-1}"
+# One run is the normal CI smoke test: hand off to smoke-tools.sh so its outputs stay in $OUT
+# (the Pages build reads smoke-out/<tool>-<variant>.png directly). Only REPEAT > 1 nests run-N folders.
+if [ "$REPEAT" = 1 ]; then
+  exec env OUT="$OUT" bash "$ROOT/scripts/smoke-tools.sh"
+fi
 mkdir -p "$OUT"
 summary="$OUT/summary.md"
 {
