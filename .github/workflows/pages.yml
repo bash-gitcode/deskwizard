@@ -43,7 +43,7 @@ jobs:
       # Runs validate, build-catalog, generate-install (install.sh) and the Vite build.
       - run: npm run build
       - run: test -s dist/install.sh && test -s dist/catalog.json
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
