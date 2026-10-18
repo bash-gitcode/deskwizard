@@ -36,6 +36,9 @@ jobs:
       - name: Built manifest and installer match the files on disk (fails if out of date)
         run: npm run -s check-manifest
 
+      - name: Support levels are no stronger than the CI jobs prove (fails on overclaim)
+        run: npm run -s check-support
+
       - name: apt-cache policy for every catalog package (fails on any missing candidate)
         run: |
           apt-get update

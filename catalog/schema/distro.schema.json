@@ -6,12 +6,13 @@
   "minItems": 1,
   "items": {
     "type": "object",
-    "required": ["id", "name", "status"],
+    "required": ["id", "name", "status", "support"],
     "additionalProperties": false,
     "properties": {
       "id": { "type": "string", "pattern": "^[a-z]+[0-9]*$" },
       "name": { "type": "string", "minLength": 1 },
       "status": { "enum": ["available", "coming_soon"] },
+      "support": { "enum": ["verified-vm", "package-checked", "community"] },
       "os_release": {
         "type": "object",
         "additionalProperties": false,
