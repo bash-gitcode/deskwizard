@@ -4,7 +4,8 @@ deskwizard is a free, static web wizard that builds a Linux desktop setup for De
 then gives you one install command for it. There is no backend, no account and no analytics. The build lives in
 your browser tab and in the share link. MIT licensed.
 
-<!-- Screenshot: docs/wizard.png (captured by the wizard-e2e CI job, see CONTRIBUTING.md) -->
+<!-- Screenshot: docs/wizard.png, one frame of the Review step captured by the wizard-e2e CI job (run 39102843063,
+     artifact wizard-e2e-screenshots). It is not taken from the Pages deploy. See CONTRIBUTING.md. -->
 ![The deskwizard wizard, Review step](docs/wizard.png)
 
 ## Read this first
@@ -35,13 +36,47 @@ bash install.sh --build <code>
 The checksum on the wizard's Review page must equal the output of `sha256sum install.sh`.
 If it does not, stop and open an issue.
 
-Use a tagged release if you want a fixed version: `https://github.com/bash-gitcode/deskwizard/releases` lists the
-files and checksums for each tag. See [RELEASING.md](RELEASING.md).
+### Versions
 
-### Versions and `/v1/`
+Each release tag `vX.Y.Z` has its own folder on the site, for example `https://bash-gitcode.github.io/deskwizard/v0.1.0/`.
+That folder holds the installer and the data it reads, and its installer reads only from that folder. Once published, the
+folder is never overwritten. The wizard's Review page shows the one-liner for the latest stable tag.
 
-The installer is served from `/v1/`. **`/v1/` is frozen after the v0.1.0 tag.** It does not change for any reason.
-A change that alters what an installed `/v1/install.sh` does ships as `/v2/`, or as a new tag that leaves `/v1/` untouched.
+`/v1/` is the **latest compatible** folder. It is rebuilt from `main` on each deploy, so it can change. For a fixed
+version, use `/vX.Y.Z/` or the files on the [releases page](https://github.com/bash-gitcode/deskwizard/releases), which
+lists `install.sh`, `uninstall.sh`, `manifest.json` and their `.sha256` files for each tag. See [RELEASING.md](RELEASING.md).
+
+## Trust
+
+**What the installer does:**
+
+- Checks that it runs as your normal user and that `/etc/os-release` says Debian 13.
+- Downloads `manifest.json` and the data files from its own folder, and checks each one against its sha256 before it
+  uses it. A mismatch stops the run before anything changes.
+- Installs the packages it lists with `sudo apt-get`, from Debian's archive.
+- Downloads the Nerd Font from its official release, and checks it against a pinned sha256. If the download fails, it
+  installs `fonts-font-awesome` from Debian instead.
+- Writes the config files the wizard shows on the Review page. Before it replaces a file, it copies the old one to
+  `~/.config-backup/<timestamp>/`.
+- With the tty1 start method, appends a block between `# BEGIN deskwizard` and `# END deskwizard` to `~/.profile`.
+  With the greetd start method, writes `/etc/greetd/config.toml` and enables `greetd.service` with `sudo`.
+
+**What it does not do:** it does not run a script it downloaded from elsewhere, does not send data anywhere (no analytics,
+no accounts), and does not install anything that the Review page did not list. The build code is data: it is parsed,
+never executed.
+
+**How to verify before you run it:**
+
+1. Check the sha256 of `install.sh` against the value on the Review page, or the `.sha256` file on the release.
+2. Read it: `less install.sh`.
+3. Run `bash install.sh --build <code> --dry-run`. It prints every step and changes nothing.
+
+**Files it writes:** the Review page lists the exact targets for your build. They are under `~/.config/`,
+`~/.local/share/backgrounds/deskwizard/`, `~/.profile` (tty1 only), `/etc/greetd/config.toml` (greetd only) and
+`~/.config-backup/`. `uninstall.sh` restores the backups.
+
+**This project is early.** It supports Debian 13 with Sway only. We recommend trying it in a virtual machine first
+(see below).
 
 ## Supported scope
 

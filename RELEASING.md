@@ -3,7 +3,8 @@
 ## Rules
 
 - A tag `vX.Y.Z` is the only way to publish. The release workflow (`.github/workflows/release.yml`) builds from the tag and attaches the files.
-- `/v1/` of the installer is frozen after the first tag. Changes that alter what an existing `/v1/install.sh` does ship as `/v2/`, or as a new minor tag that keeps `/v1/` unchanged. Never edit an installed `/v1/` file in place.
+- Each tag gets an immutable folder `/vX.Y.Z/` on the site, built from the tag. Its installer reads only from that folder. `/v1/` is the latest compatible folder and is rebuilt from `main` on each deploy, so it can change.
+- Pre-release tags (`vX.Y.Z-rcN`) are published as GitHub pre-releases. The wizard points at the latest non-pre-release tag.
 - Do not merge a release PR unless CI is green on the commit that will be tagged.
 
 ## Steps
@@ -20,8 +21,8 @@
    git tag -a v0.1.0 -m "deskwizard v0.1.0"
    git push origin v0.1.0
    ```
-6. Wait for the `release` workflow to finish. It runs the smoke test, rebuilds, checks the sha256 files and creates the GitHub Release with:
-   `install.sh`, `install.sh.sha256`, `uninstall.sh`, `uninstall.sh.sha256`, `manifest.json`, `manifest.json.sha256`.
+6. Wait for the `release` workflow to finish. It runs the smoke test, rebuilds the snapshot for the tag, checks the sha256 files and creates the GitHub Release with:
+   `install.sh`, `install.sh.sha256`, `uninstall.sh`, `uninstall.sh.sha256`, `manifest.json`, `manifest.json.sha256` and `snapshot-<tag>.tar.gz` (the folder that `pages.yml` restores on every later deploy). It then starts `pages.yml`, which publishes `/<tag>/`.
 7. Check the release page: download the files and run `sha256sum -c` against the `.sha256` files.
 8. Confirm the published site's install command still matches the release.
 

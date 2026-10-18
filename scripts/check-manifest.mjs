@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { ROOT } from "./lib/load.mjs";
+import { renderInstaller } from "./lib/installer-base.mjs";
 
 const PUBLIC = join(ROOT, "site", "public");
 const SRC = join(ROOT, "site", "src");
@@ -57,13 +58,23 @@ if (existsSync(filesDir)) {
   }
 }
 
-for (const name of ["install.sh", "uninstall.sh"]) {
-  const src = join(SRC, name === "install.sh" ? "installer.sh" : "uninstall.sh");
-  if (sha256(src) !== sha256(join(V1, name))) errors.push(`v1/${name} differs from site/src (run generate-install)`);
+// install.sh is the source with SITE_BASE set to its own folder (v1), so compare the rendered text.
+if (renderInstaller(readFileSync(join(SRC, "installer.sh"), "utf8"), "v1") !== readFileSync(join(V1, "install.sh"), "utf8")) {
+  errors.push("v1/install.sh differs from site/src/installer.sh rendered for v1 (run generate-install)");
+}
+if (sha256(join(SRC, "uninstall.sh")) !== sha256(join(V1, "uninstall.sh"))) {
+  errors.push("v1/uninstall.sh differs from site/src (run generate-install)");
 }
 
-const recorded = readFileSync(join(V1, "install.sh.sha256"), "utf8").split(/\s+/)[0];
-if (recorded !== sha256(join(V1, "install.sh"))) errors.push("v1/install.sh.sha256 does not match v1/install.sh");
+for (const name of ["install.sh", "uninstall.sh", "manifest.json"]) {
+  const sumFile = join(V1, `${name}.sha256`);
+  if (!existsSync(sumFile)) {
+    errors.push(`v1/${name}.sha256 is missing`);
+    continue;
+  }
+  const recorded = readFileSync(sumFile, "utf8").split(/\s+/)[0];
+  if (recorded !== sha256(join(V1, name))) errors.push(`v1/${name}.sha256 does not match v1/${name}`);
+}
 
 const catalog = JSON.parse(readFileSync(join(PUBLIC, "catalog.json"), "utf8"));
 if (manifest.catalog_version !== catalog.catalog_version) {

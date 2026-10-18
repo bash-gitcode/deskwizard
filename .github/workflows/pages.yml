@@ -43,6 +43,30 @@ jobs:
       # Runs validate, build-catalog, generate-install (install.sh) and the Vite build.
       - run: npm run build
       - run: test -s dist/install.sh && test -s dist/catalog.json
+      # Every published release has an immutable snapshot at /<tag>/, stored as a release asset by release.yml.
+      # Rebuilding the site from scratch would otherwise drop old snapshots, so they are restored here.
+      # A missing asset fails the build, and an existing folder is never overwritten.
+      - name: Restore release snapshots
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p snapshots
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,isPrerelease \
+            -q '.[] | [.tagName, (.isPrerelease | tostring)] | @tsv' > releases.tsv
+          latest=""
+          while IFS=$'\t' read -r tag pre; do
+            [ -n "$tag" ] || continue
+            if [ -e "dist/$tag" ]; then echo "refusing to overwrite dist/$tag"; exit 1; fi
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "snapshot-$tag.tar.gz" --dir snapshots
+            tar -xzf "snapshots/snapshot-$tag.tar.gz" -C dist
+            test -s "dist/$tag/install.sh"
+            echo "restored /$tag/"
+            if [ "$pre" = "false" ] && [ -z "$latest" ]; then latest="$tag"; fi
+          done < releases.tsv
+          # The wizard's Review page points at the latest stable tag, or at /v1/ before any release exists.
+          printf '{"latest": "%s"}\n' "${latest:-v1}" > dist/latest.json
+          cat dist/latest.json
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: dist

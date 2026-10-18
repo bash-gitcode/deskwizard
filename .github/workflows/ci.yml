@@ -146,6 +146,65 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # Installs from a /<tag>/ snapshot (the layout release.yml publishes), served by a local file server.
+  # Checks that the snapshot round-trips through the release tarball, that the installer reads its files from its own
+  # folder, and that a tampered copy aborts before anything is changed.
+  versioned-install:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Build the site and a snapshot for a test tag
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils python3
+          npm ci
+          npm run build
+          DESKWIZARD_SNAPSHOT_TAG=v0.1.0-rc1 DESKWIZARD_OUT_ROOT=/srv/snap node scripts/generate-install.mjs
+          grep -qxF 'SITE_BASE="https://bash-gitcode.github.io/deskwizard/v0.1.0-rc1"' /srv/snap/v0.1.0-rc1/install.sh
+          # The release tarball must unpack to the same folder (this is what pages.yml restores).
+          tar -C /srv/snap -czf /srv/snapshot.tar.gz v0.1.0-rc1
+          mkdir -p /srv/restored && tar -xzf /srv/snapshot.tar.gz -C /srv/restored
+          diff -r /srv/snap/v0.1.0-rc1 /srv/restored/v0.1.0-rc1
+          # A copy where every data file is changed, to check that the installer aborts.
+          cp -r /srv/snap /srv/tampered
+          find /srv/tampered/v0.1.0-rc1/files -type f -exec sh -c 'printf "# tampered\n" >> "$1"' _ {} \;
+          useradd -m builder
+          chmod -R a+rX /srv/snap /srv/tampered
+          chown -R builder "$GITHUB_WORKSPACE"
+
+      - name: Install from the snapshot over HTTP (good copy succeeds, tampered copy aborts)
+        run: |
+          set -uo pipefail
+          (cd /srv/snap && exec python3 -m http.server 8080 --bind 127.0.0.1) > serve-good.log 2>&1 &
+          good_srv=$!
+          (cd /srv/tampered && exec python3 -m http.server 8081 --bind 127.0.0.1) > serve-bad.log 2>&1 &
+          bad_srv=$!
+          trap 'kill "$good_srv" "$bad_srv" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            curl -fsS -o /dev/null http://127.0.0.1:8080/v0.1.0-rc1/manifest.json && curl -fsS -o /dev/null http://127.0.0.1:8081/v0.1.0-rc1/manifest.json && break
+            sleep 1
+          done
+          CODE="$(node scripts/ci-helpers.mjs code manual)"
+          runuser -u builder -- env HOME=/home/builder DESKWIZARD_TEST_MODE=1 \
+            DESKWIZARD_TEST_BASE_URL=http://127.0.0.1:8080/v0.1.0-rc1 \
+            bash /srv/snap/v0.1.0-rc1/install.sh --build "$CODE" --dry-run > good.log 2>&1
+          good=$?
+          runuser -u builder -- env HOME=/home/builder DESKWIZARD_TEST_MODE=1 \
+            DESKWIZARD_TEST_BASE_URL=http://127.0.0.1:8081/v0.1.0-rc1 \
+            bash /srv/snap/v0.1.0-rc1/install.sh --build "$CODE" --dry-run > bad.log 2>&1
+          bad=$?
+          cat good.log
+          echo "--- tampered run (exit $bad) ---"
+          cat bad.log
+          test "$good" -eq 0 || { echo "FAIL: good snapshot dry run exited $good"; exit 1; }
+          test "$bad" -ne 0 || { echo "FAIL: tampered snapshot was accepted"; exit 1; }
+          grep -q 'checksum mismatch' bad.log || { echo "FAIL: no checksum mismatch message"; exit 1; }
+          grep -q 'Nothing was changed' bad.log || { echo "FAIL: abort did not say nothing was changed"; exit 1; }
+          echo "versioned-install: good snapshot OK, tampered snapshot aborted before any change"
+
   # Job B: every variant of waybar, foot, fuzzel, mako and swaybg runs under headless Sway (see smoke.yml).
   tool-smoke:
     uses: ./.github/workflows/smoke.yml
