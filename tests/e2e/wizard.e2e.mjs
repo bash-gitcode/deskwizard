@@ -139,8 +139,11 @@ async function main() {
   // 6. Review
   await page.getByRole("heading", { name: "Review" }).waitFor();
   const line = page.getByRole("textbox", { name: "Install command" });
+  // The command is filled in after latest.json is read, so wait for it.
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="Install command"]')?.value.startsWith("curl "), null, { timeout: 10000 });
   const oneLiner = await line.inputValue();
-  check(oneLiner.includes("/v1/install.sh"), "one-liner uses /v1/install.sh");
+  // Local builds have no latest.json, so the Review page falls back to v1. A release build points at its tag.
+  check(/\/(v1|v\d+\.\d+\.\d+(-rc\d+)?)\/install\.sh /.test(oneLiner), "one-liner uses a versioned install.sh folder");
   check(/ \| bash -s -- --build [A-Za-z0-9_-]+$/.test(oneLiner), "one-liner passes the build code with --build and no script");
   check(!oneLiner.includes("--script"), "one-liner does not use the old --script bootstrap");
   await page.getByText(/^sha256 of install\.sh: [0-9a-f]{64}$/).waitFor({ timeout: 10000 }).then(

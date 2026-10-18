@@ -17,7 +17,12 @@ import {
 
 const HASH_KEY = "build=";
 const NEEDED_LABEL = { required: "Required", recommended: "Recommended", optional: "Optional" };
-const INSTALLER_PATH = "v1/install.sh";
+// Folder of the installer the Review page links to: the latest stable release tag (written by the Pages build),
+// or v1 (latest compatible) when no release exists yet.
+const latestDir = fetch("latest.json")
+  .then((r) => (r.ok ? r.json() : null))
+  .then((j) => (j && typeof j.latest === "string" && /^v[0-9][0-9A-Za-z.+-]*$/.test(j.latest) ? j.latest : "v1"))
+  .catch(() => "v1");
 
 // ---- tiny DOM helper --------------------------------------------------------
 function el(tag, props = {}, ...children) {
@@ -509,12 +514,17 @@ export function startWizard(root, catalog) {
     }
 
     const code = buildCode(app.state, catalogVersion);
-    const installerUrl = new URL(INSTALLER_PATH, location.href).href;
-    const line = `curl -fsSL ${installerUrl} | bash -s -- --build ${code}`;
+    // The line is filled in once the latest release folder is known (see latestDir above).
     const fits = code.length <= MAX_CODE_LENGTH;
-    // The sha256 of install.sh is written by the build (scripts/generate-install.mjs).
+    const commandOut = el("textarea", { readonly: true, rows: 3, "aria-label": "Install command", value: "loading..." });
     const shaOut = el("code", { class: "wrap" }, "loading...");
-    fetch(`${INSTALLER_PATH}.sha256`)
+    let line = "";
+    latestDir.then((dir) => {
+      const installerUrl = new URL(`${dir}/install.sh`, location.href).href;
+      line = `curl -fsSL ${installerUrl} | bash -s -- --build ${code}`;
+      commandOut.value = line;
+      return fetch(`${dir}/install.sh.sha256`);
+    })
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.text();
@@ -550,13 +560,22 @@ export function startWizard(root, catalog) {
       el("h3", {}, "Install command"),
       el("p", {}, "Run this in a terminal on Debian 13. It downloads the installer and runs this build. Add --dry-run at the end to print every step without changing anything."),
       fits
-        ? el("textarea", { readonly: true, rows: 3, "aria-label": "Install command", value: line })
+        ? commandOut
         : el("p", { class: "warn", role: "alert" }, `This build code is longer than ${MAX_CODE_LENGTH} characters, so the installer will refuse it. Choose fewer options.`),
       el(
         "div",
         { class: "row" },
         fits ? copyBtn : null,
-        el("button", { type: "button", onclick: () => download("install.sh", installerSource, "text/x-shellscript") }, "Download install.sh")
+        el("button", { type: "button", onclick: () =>
+            latestDir
+              .then((dir) => fetch(`${dir}/install.sh`))
+              .then((r) => {
+                if (!r.ok) throw new Error(String(r.status));
+                return r.text();
+              })
+              .then((t) => download("install.sh", t, "text/x-shellscript"))
+              .catch(() => { app.message = "Could not download install.sh (run npm run build)."; render(); }) },
+          "Download install.sh")
       ),
       el("p", { class: "meta" }, "sha256 of install.sh: ", shaOut),
       el("pre", { class: "script" }, "sha256sum install.sh   # prints the same sha256 as above"),
@@ -572,7 +591,7 @@ export function startWizard(root, catalog) {
       el("p", { class: "meta" }, `Font: ${plan.font.name}${plan.downloadFont ? " (downloaded, SHA-256 checked)" : ""}. Existing files are copied to ~/.config-backup/<timestamp>/ first.`),
       el("p", { class: "meta" }, `Start method: ${plan.startSummary}`),
 
-      el("details", {}, el("summary", {}, "Installer preview (install.sh, the same for every build)"), el("pre", { class: "script" }, installerSource)),
+      el("details", {}, el("summary", {}, "Installer preview (install.sh source; the published copy sets SITE_BASE to its own folder)"), el("pre", { class: "script" }, installerSource)),
 
       el("h3", {}, "Keep this build"),
       el("div", { class: "row" }, shareBtn, el("button", { type: "button", onclick: () => download(fileName, stringify(toPayload(app.state, catalogVersion)), "text/yaml") }, "Save build (.yaml)")),

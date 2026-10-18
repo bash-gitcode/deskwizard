@@ -1,113 +1,148 @@
 # deskwizard
 
-A free, static site that builds a Linux desktop setup and gives you one install command.
-No backend, no accounts, no analytics. Your build lives in the browser tab and in the share link. MIT licensed.
+deskwizard is a free, static web wizard that builds a Linux desktop setup for Debian 13 "trixie" with Sway,
+then gives you one install command for it. There is no backend, no account and no analytics. The build lives in
+your browser tab and in the share link. MIT licensed.
 
-**Phase 1 scope:** Debian 13 "trixie" + Sway + Waybar only.
+<!-- Screenshot: docs/wizard.png, one frame of the Review step captured by the wizard-e2e CI job (run 39102843063,
+     artifact wizard-e2e-screenshots). It is not taken from the Pages deploy. See CONTRIBUTING.md. -->
+![The deskwizard wizard, Review step](docs/wizard.png)
 
-## Commands
+## Read this first
 
-```sh
-npm ci
-npm run validate        # checks every catalog YAML against the schemas
-npm run build-catalog   # compiles catalog/ into site/public/catalog.json (+ screenshots)
-npm run generate-install# writes site/public/install.sh for the default build
-npm run dev             # local preview
-npm run build           # all of the above, then the Vite bundle into dist/
-```
+The install command runs a shell script as your user, and the script uses `sudo` to install packages. **Read the
+script before you run it.** The steps below download it, check its checksum and show it to you.
 
-Test the installer without changing anything (run as a normal user, not root):
+## Install (read first, then run)
 
-```sh
-npm run build
-bash site/public/v1/install.sh --dry-run
-```
-
-The installer is served from `/v1/install.sh`. `/install.sh` at the site root is an alias to the latest version. The wizard's one-liner uses the versioned path.
-
-## CI (`.github/workflows/ci.yml`)
-
-Runs on push to `main`, on every pull request, and on manual dispatch.
-
-- **Job A, `package-check`** (container `debian:trixie`): builds, checks that every apt package the catalog needs has a candidate in Debian 13 (`apt-cache policy`, fails on any missing one), runs the installer dry run as a non-root user, and runs `shellcheck -x` on the installer and `scripts/smoke-tools.sh`.
-- **Job B, `waybar-variants`** (container `debian:trixie`): installs Sway, Waybar 0.12.0, grim, Font Awesome, fontconfig and the pinned Nerd Font (checksum checked). It starts headless Sway (1920x1080, pixman) and runs each Waybar variant for 5 s. It fails if the process exits or stderr contains `error` or `failed`. It lists warnings separately and saves a `grim` screenshot per variant. Uploads the `waybar-smoke` artifact.
-- **Job C, `wizard-e2e`** (Ubuntu runner): installs Playwright and headless Chromium in CI only (not a repo dependency). It clicks through Debian 13 > Wayland > Sway > Waybar > variant > Review, checks the badges, the one-liner (`/v1/install.sh`), Save/Load, and the old-catalog notice. Uploads the `wizard-e2e-screenshots` artifact, one screenshot per step.
-
-### Run the Waybar smoke test locally in a container
-
-Needs Docker or Podman. Run it as a non-root user inside the container:
+The wizard's Review page shows the exact command, including the build code (`--build <code>`).
 
 ```sh
-docker run --rm -v "$PWD":/work -w /work debian:trixie bash -c '
-  apt-get update && apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils procps sway waybar grim fonts-font-awesome fontconfig &&
-  useradd -m builder && chown -R builder /work &&
-  runuser -u builder -- env HOME=/home/builder PATH="$PATH" bash -c "npm ci && node scripts/validate.mjs && node scripts/build-catalog.mjs && OUT=/work/smoke-out bash scripts/smoke-tools.sh"
-'
+# 1. Download the installer
+curl -fsSLO https://bash-gitcode.github.io/deskwizard/v1/install.sh
+curl -fsSLO https://bash-gitcode.github.io/deskwizard/v1/install.sh.sha256
+
+# 2. Check it against the checksum published with the release
+sha256sum -c install.sh.sha256        # must print: install.sh: OK
+
+# 3. Read it
+less install.sh
+
+# 4. Run it with the build code from the wizard
+bash install.sh --build <code> --dry-run   # shows every change without making it
+bash install.sh --build <code>
 ```
 
-Screenshots and logs land in `smoke-out/`.
+The checksum on the wizard's Review page must equal the output of `sha256sum install.sh`.
+If it does not, stop and open an issue.
 
-### Run the browser click-through locally
+### Versions
+
+Each release tag `vX.Y.Z` has its own folder on the site, for example `https://bash-gitcode.github.io/deskwizard/v0.1.0/`.
+That folder holds the installer and the data it reads, and its installer reads only from that folder. Once published, the
+folder is never overwritten. The wizard's Review page shows the one-liner for the latest stable tag.
+
+`/v1/` is the **latest compatible** folder. It is rebuilt from `main` on each deploy, so it can change. For a fixed
+version, use `/vX.Y.Z/` or the files on the [releases page](https://github.com/bash-gitcode/deskwizard/releases), which
+lists `install.sh`, `uninstall.sh`, `manifest.json` and their `.sha256` files for each tag. See [RELEASING.md](RELEASING.md).
+
+## Trust
+
+**What the installer does:**
+
+- Checks that it runs as your normal user and that `/etc/os-release` says Debian 13.
+- Downloads `manifest.json` and the data files from its own folder, and checks each one against its sha256 before it
+  uses it. A mismatch stops the run before anything changes.
+- Installs the packages it lists with `sudo apt-get`, from Debian's archive.
+- Downloads the Nerd Font from its official release, and checks it against a pinned sha256. If the download fails, it
+  installs `fonts-font-awesome` from Debian instead.
+- Writes the config files the wizard shows on the Review page. Before it replaces a file, it copies the old one to
+  `~/.config-backup/<timestamp>/`.
+- With the tty1 start method, appends a block between `# BEGIN deskwizard` and `# END deskwizard` to `~/.profile`.
+  With the greetd start method, writes `/etc/greetd/config.toml` and enables `greetd.service` with `sudo`.
+
+**What it does not do:** it does not run a script it downloaded from elsewhere, does not send data anywhere (no analytics,
+no accounts), and does not install anything that the Review page did not list. The build code is data: it is parsed,
+never executed.
+
+**How to verify before you run it:**
+
+1. Check the sha256 of `install.sh` against the value on the Review page, or the `.sha256` file on the release.
+2. Read it: `less install.sh`.
+3. Run `bash install.sh --build <code> --dry-run`. It prints every step and changes nothing.
+
+**Files it writes:** the Review page lists the exact targets for your build. They are under `~/.config/`,
+`~/.local/share/backgrounds/deskwizard/`, `~/.profile` (tty1 only), `/etc/greetd/config.toml` (greetd only) and
+`~/.config-backup/`. `uninstall.sh` restores the backups.
+
+**This project is early.** It supports Debian 13 with Sway only. We recommend trying it in a virtual machine first
+(see below).
+
+## Supported scope
+
+- **Distribution:** Debian 13 "trixie" only.
+- **Desktop:** Sway (Wayland). Waybar is the bar.
+- **Tools in this release:** sway, waybar (5 looks), foot, fuzzel, mako, swaybg (3 wallpapers).
+- **Font:** a Nerd Font is downloaded at install time from its official release, pinned by sha256 (not redistributed here).
+
+Packages are installed from Debian's archive. CI checks that each one has a candidate in Debian 13 on every pull request.
+
+## Known limits
+
+- Debian 13 only. The installer reads `/etc/os-release` and stops on other systems.
+- The installer changes system configuration that Sway needs, and replaces some user config files. It backs up what it
+  replaces, and `uninstall.sh` restores the latest backups. Review the Review page before you run it.
+- Headless smoke tests check that each variant starts on Sway and is screenshotted. They do not check how it looks on your hardware.
+- CI starts every Waybar, foot, fuzzel, mako and swaybg variant under headless Sway. That is a start-up check, not a visual review.
+- The site is static. Your build is not stored anywhere else; the share link carries it.
+
+## Uninstall
 
 ```sh
-npm run build
-npm i --no-save playwright@1.48.2 && npx playwright install --with-deps chromium
-node tests/e2e/wizard.e2e.mjs      # screenshots go to e2e-shots/
+curl -fsSLO https://bash-gitcode.github.io/deskwizard/v1/uninstall.sh
+bash uninstall.sh --dry-run    # shows what it would restore
+bash uninstall.sh
 ```
 
-Unit tests for the generator and the share-link payload: `node --test tests/`.
+It restores the latest backups of the files the installer replaced. It does not remove packages that were installed
+through apt; remove those with `sudo apt remove <package>` if you want them gone.
+
+## Test in a virtual machine
+
+Install Debian 13 in a VM (for example with QEMU or VirtualBox) from a clean image, sign in as a normal user with sudo,
+then follow the install steps above. Take a snapshot before you run `install.sh` so you can roll back.
+
+To test the installer without changing anything, run the dry run from a checkout:
+
+```sh
+npm ci && npm run build
+bash site/public/v1/install.sh --build <code> --dry-run
+```
+
+## Development
+
+```sh
+npm ci                 # also renders the wallpapers (prepare script)
+npm run validate       # schemas and cross-references
+npm run build          # everything, then the Vite bundle into dist/
+npm run dev            # local preview
+```
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): add a tool or a variant in about 5 minutes, and how CI checks it.
+- [SECURITY.md](SECURITY.md): report a vulnerability privately.
+- [CHANGELOG.md](CHANGELOG.md) and [RELEASING.md](RELEASING.md).
+- [THIRD_PARTY.md](THIRD_PARTY.md): what is not authored here (Nerd Fonts, Debian packages).
 
 ## Layout
 
 ```
-catalog/
-  distros.yaml            distros shown in step 1
-  fonts.yaml              pinned Nerd Font release (URL, sha256)
-  tools/<id>/tool.yaml    one file per tool; packages keyed by distro
-  tools/<id>/files/       files a tool installs as-is (e.g. sway.conf)
-  tools/<id>/variants/NN/ meta.yaml, config.jsonc, style.css, screenshot.svg
-  schema/*.json           JSON Schemas used by validate
-scripts/
-  validate.mjs           schema + cross-reference checks
-  build-catalog.mjs      catalog/ -> site/public/catalog.json
-  generate-install.mjs   catalog -> v1/ (static install.sh, uninstall.sh, manifest.json, data files)
-site/
-  index.html, src/        vanilla JS wizard (no UI framework)
-  src/generator.js        pure state -> plan -> build code logic
-  src/installer.sh        static installer (reads the build code as data only)
-  src/uninstall.sh        restores the latest backups
+catalog/                 tools, variants, palettes, fonts, schemas (the source of truth)
+scripts/                 validate, build-catalog, generate-install, checks, scaffolds
+site/src/                wizard (vanilla JS), installer.sh, uninstall.sh
+site/public/v1/          generated installer, manifest and data files (build output, not committed)
+tests/                   unit tests (node --test tests/) and the browser click-through
 ```
-
-## Add a variant in 5 minutes
-
-1. Copy `catalog/tools/waybar/variants/01` to `variants/06` and change the `id` and `name` in `meta.yaml`.
-2. Edit `config.jsonc` and `style.css`. Colours must be `@define-color` names, not literals (see the existing variants).
-3. Only use Sway/Waybar options that exist in the Debian 13 versions (see the table below).
-4. Replace `screenshot.svg` with a real screenshot, or keep the placeholder (update the `screenshot` field if the file type changes).
-5. Run `npm run build`. It fails with the file and field that is wrong.
-
-## Add a tool in 5 minutes
-
-1. Create `catalog/tools/<id>/tool.yaml` with the required fields (copy `waybar/tool.yaml`).
-2. Fill `packages.debian13` with names verified in a `debian:trixie` container (`apt-get update && apt-cache policy <pkg>`).
-3. Put any files it installs under `files/` (for `from: tool`) or in variants (for `from: variant`).
-4. Add `requires` / `works_with` if it depends on another tool. The wizard adds the "Also needs" prompt automatically.
-5. Run `npm run build`. The wizard shows a page for the tool with no UI code changes.
-
-## Versions shipped by Debian 13 (trixie)
-
-Recorded from the trixie archive during Phase 1 (see the report for how they were checked).
-Variants may only use options available in these versions.
-
-| Package | Candidate (read from the host's apt lists, not refreshed; Job A checks in CI) |
-|---|---|
-| sway | 1.10.1-2 |
-| waybar | 0.12.0-1 |
-| swaylock | 1.8.2-1 |
-| fonts-font-awesome | 5.0.10+really4.7.0~dfsg-4.1 |
-| curl | 8.14.1-2+deb13u7 |
-| fontconfig | 2.15.0-2.3 |
 
 ## Licence
 
-MIT. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).

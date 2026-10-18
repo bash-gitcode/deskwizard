@@ -1,0 +1,22 @@
+name: New variant request
+description: Propose a new look for an existing tool
+labels: [variant]
+body:
+  - type: input
+    id: tool
+    attributes:
+      label: Tool (for example waybar, foot, mako)
+    validations:
+      required: true
+  - type: textarea
+    id: look
+    attributes:
+      label: Describe the look
+      description: Name the colours in your own words. Do not paste a named theme (for example a published colour scheme) unless its licence allows it and you say so.
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: Attach a PNG of the variant running on Sway, or say that you will add one in the PR.
