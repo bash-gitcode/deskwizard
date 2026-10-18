@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:trixie
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install build tools
         run: |
@@ -29,6 +29,12 @@ jobs:
         run: |
           npm ci
           npm run build
+
+      - name: Every catalog file is referenced by a tool or variant (fails on orphans)
+        run: npm run -s check-catalog-refs
+
+      - name: Built manifest and installer match the files on disk (fails if out of date)
+        run: npm run -s check-manifest
 
       - name: apt-cache policy for every catalog package (fails on any missing candidate)
         run: |
@@ -74,13 +80,36 @@ jobs:
           shellcheck -x scripts/smoke-tools.sh
           shellcheck -x scripts/smoke-repeat.sh
 
+  # First-run check for contributors: a fresh clone of this commit, then the three commands from the README.
+  # Runs in its own container, so nothing from the build workspace leaks into it.
+  first-run:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - name: Install node, git
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates git
+
+      - name: Clone this commit (committed files only, like a contributor's clone)
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git clone "$GITHUB_WORKSPACE" /tmp/fresh
+          cd /tmp/fresh && git log -1 --oneline
+
+      - name: npm ci
+        run: cd /tmp/fresh && npm ci
+
+      - name: npm run validate
+        run: cd /tmp/fresh && npm run validate
+
   # Job H4: the installer's dry run for the default build, in debian:trixie. The full output goes to
   # the job summary. The test base URL is a file:// copy of the build, so the dry run uses this commit.
   dry-run:
     runs-on: ubuntu-latest
     container: debian:trixie
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Node and build the site and installer
         run: |
@@ -124,7 +153,7 @@ jobs:
     outputs:
       run: ${{ steps.filter.outputs.run }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
 
@@ -147,7 +176,7 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:trixie
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Node and build the site and installer
         run: |
@@ -180,7 +209,7 @@ jobs:
 
       - name: Upload the screenshot and logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: full-install
           path: full-install-out/
@@ -192,7 +221,7 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:trixie
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Node, sudo and the build tools
         run: |
@@ -228,7 +257,7 @@ jobs:
 
       - name: Upload the conffile logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: conffile-logs
           path: conffile-out/
@@ -236,7 +265,7 @@ jobs:
 
       - name: Upload the uninstall logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: uninstall-logs
           path: uninstall-out/
@@ -248,7 +277,7 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:trixie
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Node and build the site and installer
         run: |
@@ -279,7 +308,7 @@ jobs:
       matrix:
         method: [tty1, greetd]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Node, sudo and the build tools
         run: |
@@ -306,7 +335,7 @@ jobs:
 
       - name: Upload the installer log when a start method fails
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: install-log-${{ matrix.method }}
           path: install.log
@@ -334,9 +363,9 @@ jobs:
     if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 20
           cache: npm
@@ -356,7 +385,7 @@ jobs:
 
       - name: Upload step screenshots
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: wizard-e2e-screenshots
           path: e2e-shots/

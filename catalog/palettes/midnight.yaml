@@ -3,13 +3,13 @@ name: Midnight Ink
 mode: dark
 default: true
 tokens:
-  bg: "#1e1e2e"
-  surface: "#313244"
-  fg: "#cdd6f4"
-  muted: "#6c7086"
-  accent: "#89b4fa"
-  accent2: "#cba6f7"
-  warn: "#f9e2af"
-  error: "#f38ba8"
+  bg: "#161a22"
+  surface: "#232a36"
+  fg: "#e4e9f2"
+  muted: "#7b8496"
+  accent: "#5fb3b3"
+  accent2: "#9d8cd6"
+  warn: "#e8c46a"
+  error: "#e0707a"
   font_ui: sans-serif
   font_mono: monospace

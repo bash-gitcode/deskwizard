@@ -1,0 +1,47 @@
+name: release
+
+# Runs on a tag like v0.1.0. See RELEASING.md for the maintainer steps.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    uses: ./.github/workflows/smoke.yml
+
+  publish:
+    needs: smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Verify the built output against its sources
+        run: npm run -s check-manifest
+      - name: Checksums for the release assets
+        working-directory: site/public/v1
+        run: |
+          sha256sum install.sh > install.sh.sha256
+          sha256sum uninstall.sh > uninstall.sh.sha256
+          sha256sum manifest.json > manifest.json.sha256
+          sha256sum -c install.sh.sha256 uninstall.sh.sha256 manifest.json.sha256
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        working-directory: site/public/v1
+        run: |
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "deskwizard $TAG" \
+            --notes-file "$GITHUB_WORKSPACE/CHANGELOG.md" \
+            install.sh install.sh.sha256 uninstall.sh uninstall.sh.sha256 manifest.json manifest.json.sha256

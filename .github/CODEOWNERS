@@ -1,0 +1,6 @@
+# Changes to these paths need review from a maintainer.
+site/src/installer.sh            @bash-gitcode
+site/src/uninstall.sh            @bash-gitcode
+scripts/*manifest*               @bash-gitcode
+catalog/schema/*                 @bash-gitcode
+.github/workflows/*              @bash-gitcode
