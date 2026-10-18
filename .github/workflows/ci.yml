@@ -176,17 +176,27 @@ jobs:
           chown -R builder "$GITHUB_WORKSPACE"
 
       - name: Install from the snapshot over HTTP (good copy succeeds, tampered copy aborts)
+        shell: bash
         run: |
-          set -uo pipefail
-          (cd /srv/snap && exec python3 -m http.server 8080 --bind 127.0.0.1) > serve-good.log 2>&1 &
-          good_srv=$!
-          (cd /srv/tampered && exec python3 -m http.server 8081 --bind 127.0.0.1) > serve-bad.log 2>&1 &
-          bad_srv=$!
-          trap 'kill "$good_srv" "$bad_srv" 2>/dev/null || true' EXIT
+          set -euo pipefail
+          python3 -m http.server 8080 --bind 127.0.0.1 --directory /srv/snap > serve-good.log 2>&1 &
+          python3 -m http.server 8081 --bind 127.0.0.1 --directory /srv/tampered > serve-bad.log 2>&1 &
+          trap 'kill $(jobs -p) 2>/dev/null || true' EXIT
+          ready=0
           for i in $(seq 1 30); do
-            curl -fsS -o /dev/null http://127.0.0.1:8080/v0.1.0-rc1/manifest.json && curl -fsS -o /dev/null http://127.0.0.1:8081/v0.1.0-rc1/manifest.json && break
+            if curl -fsS -o /dev/null http://127.0.0.1:8080/v0.1.0-rc1/manifest.json && curl -fsS -o /dev/null http://127.0.0.1:8081/v0.1.0-rc1/manifest.json; then
+              ready=1
+              break
+            fi
             sleep 1
           done
+          if [ "$ready" != 1 ]; then
+            cat serve-good.log serve-bad.log
+            echo "FAIL: the snapshot servers did not start"
+            exit 1
+          fi
+          # The installer's exit status is checked below, so stop exiting on the first failure here.
+          set +e
           CODE="$(node scripts/ci-helpers.mjs code manual)"
           runuser -u builder -- env HOME=/home/builder DESKWIZARD_TEST_MODE=1 \
             DESKWIZARD_TEST_BASE_URL=http://127.0.0.1:8080/v0.1.0-rc1 \
