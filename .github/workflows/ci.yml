@@ -288,7 +288,8 @@ jobs:
           CONF=/home/builder/.config/sway/config
           # sway refuses to start without a runtime dir, even for a config check (-C).
           mkdir -p /tmp/xdg-builder && chown builder /tmp/xdg-builder && chmod 700 /tmp/xdg-builder
-          runuser -u builder -- env XDG_RUNTIME_DIR=/tmp/xdg-builder sway -C -c "$CONF"
+          # Headless backend and no seat: without them sway -C tries to open a DRM session and times out.
+          runuser -u builder -- env XDG_RUNTIME_DIR=/tmp/xdg-builder WLR_BACKENDS=headless LIBSEAT_BACKEND=noop sway -C -c "$CONF"
           case "${{ matrix.preset }}" in
             min) want_gap='gaps inner 0'; want_lock=60; want_border='default_border pixel 0' ;;
             max) want_gap='gaps inner 50'; want_lock=7200; want_border='default_border pixel 10' ;;
