@@ -25,6 +25,7 @@ packages:
     - sway
     - swaylock
     - swayidle
+    - fuzzel
 difficulty: medium
 ram_mb: 150
 default_variant: null

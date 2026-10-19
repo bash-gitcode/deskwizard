@@ -65,7 +65,46 @@ if (cmd === "packages") {
       catalog.catalog_version,
     ),
   );
+} else if (cmd === "sway-code") {
+  // Build code for the Sway config check: the default build, with every Sway option at its default, min or max.
+  // Numbers take min or max; bools take the value that is not the default (false for min, true for max).
+  const preset = start;
+  if (!["default", "min", "max"].includes(preset)) {
+    console.error("ci-helpers: sway-code takes default, min or max");
+    process.exit(2);
+  }
+  const sway = catalog.tools.find((t) => t.id === "sway");
+  const options = {};
+  for (const o of sway.options) {
+    if (preset === "default") options[o.key] = o.default;
+    else if (o.type === "number") options[o.key] = preset === "min" ? o.min : o.max;
+    else if (o.type === "bool") options[o.key] = preset === "max";
+    else options[o.key] = o.default;
+  }
+  process.stdout.write(
+    buildCode(
+      {
+        distro: "debian13",
+        display: "wayland",
+        font: "jetbrains-mono",
+        palette: "midnight",
+        start: "manual",
+        // The screenshot and media-keys extras add the Print, volume and brightness binds, so the check covers them.
+        extras: ["screenshot", "media-keys"],
+        choices: {
+          sway: { variant: null },
+          waybar: { variant: "minimal" },
+          mako: { variant: "corner" },
+          swaybg: { variant: "dusk" },
+          foot: { variant: "classic" },
+          fuzzel: { variant: "classic" },
+        },
+        options: { sway: options },
+      },
+      catalog.catalog_version,
+    ),
+  );
 } else {
-  console.error("usage: node scripts/ci-helpers.mjs packages|font|code <start>");
+  console.error("usage: node scripts/ci-helpers.mjs packages|font|code <start>|sway-code <default|min|max>");
   process.exit(2);
 }

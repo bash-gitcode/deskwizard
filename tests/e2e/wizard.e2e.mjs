@@ -138,6 +138,9 @@ async function main() {
 
   // 6. Review
   await page.getByRole("heading", { name: "Review" }).waitFor();
+  // The keybind cheat sheet comes from the same bind data that writes sway.conf.
+  check(await page.getByRole("heading", { name: "Keybinds" }).isVisible(), "Review shows the Keybinds cheat sheet");
+  check(await page.getByText("Open a terminal", { exact: false }).first().isVisible(), "cheat sheet lists 'Open a terminal'");
   const line = page.getByRole("textbox", { name: "Install command" });
   // The command is filled in after latest.json is read, so wait for it.
   await page.waitForFunction(() => document.querySelector('textarea[aria-label="Install command"]')?.value.startsWith("curl "), null, { timeout: 10000 });

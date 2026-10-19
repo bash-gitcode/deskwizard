@@ -23,13 +23,16 @@
   autostart: []
   binds:
     - key: Print
-      command: exec grim -g "$(slurp)" ~/screenshot-$(date +%F-%T).png
-      label: Screenshot of a region (saved to your home folder)
+      command: exec sh -c 'mkdir -p ~/Pictures/Screenshots && grim -g $(slurp) ~/Pictures/Screenshots/$(date +%F_%H%M%S).png'
+      label: Screenshot of a region (saved to Pictures/Screenshots)
+    - key: Shift+Print
+      command: exec sh -c 'mkdir -p ~/Pictures/Screenshots && grim ~/Pictures/Screenshots/$(date +%F_%H%M%S).png'
+      label: Screenshot of the whole screen (saved to Pictures/Screenshots)
 - id: media-keys
   name: Volume and brightness keys
   reason: Makes the keyboard volume and brightness keys work.
   packages:
-    debian13: [pulseaudio-utils, brightnessctl]
+    debian13: [pulseaudio-utils, brightnessctl, playerctl]
   autostart: []
   binds:
     - key: XF86AudioRaiseVolume
@@ -47,3 +50,12 @@
     - key: XF86MonBrightnessDown
       command: exec brightnessctl set 5%-
       label: Brightness down
+    - key: XF86AudioPlay
+      command: exec playerctl play-pause
+      label: Play or pause media
+    - key: XF86AudioNext
+      command: exec playerctl next
+      label: Next track
+    - key: XF86AudioPrev
+      command: exec playerctl previous
+      label: Previous track
