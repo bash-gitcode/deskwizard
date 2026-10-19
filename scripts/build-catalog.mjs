@@ -6,6 +6,7 @@
 import { existsSync, mkdirSync, writeFileSync, copyFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT, CATALOG, loadCatalog, readYaml, readText, rel } from "./lib/load.mjs";
+import { validateState } from "../site/src/generator.js";
 
 const OUT_DIR = join(ROOT, "site", "public");
 const OUT_ASSETS = join(OUT_DIR, "catalog");
@@ -25,6 +26,12 @@ const palettes = readdirSync(join(CATALOG, "palettes"))
   .filter((n) => n.endsWith(".yaml"))
   .sort()
   .map((n) => readYaml(join(CATALOG, "palettes", n)));
+
+// Bases are complete starting builds (catalog/bases/*.yaml). The first one is the Quick install choice.
+const bases = readdirSync(join(CATALOG, "bases"))
+  .filter((n) => n.endsWith(".yaml"))
+  .sort()
+  .map((n) => readYaml(join(CATALOG, "bases", n)));
 
 // Clean output so removed tools/variants do not linger in the site.
 rmSync(OUT_ASSETS, { recursive: true, force: true });
@@ -114,8 +121,30 @@ const catalog = {
   extras,
   palettes,
   start_methods: startMethods,
+  bases,
   tools: tools.sort((a, b) => a.display.order - b.display.order),
 };
+
+// Each base goes through the same validation as a build the user makes.
+const baseErrors = [];
+for (const base of bases) {
+  const state = {
+    distro: base.distro,
+    display: base.display,
+    font: base.font,
+    palette: base.palette,
+    start: base.start,
+    extras: [],
+    choices: base.tools,
+    options: base.options ?? {},
+  };
+  for (const e of validateState(state, catalog).errors) baseErrors.push(`${base.id}: ${e}`);
+}
+if (baseErrors.length) {
+  console.error("build-catalog: bases do not pass validation:\n");
+  for (const e of baseErrors) console.error("  " + e);
+  process.exit(1);
+}
 
 writeFileSync(join(OUT_DIR, "catalog.json"), JSON.stringify(catalog, null, 2) + "\n");
 const variantCount = tools.reduce((n, t) => n + t.variants.length, 0);

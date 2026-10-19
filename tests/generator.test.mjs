@@ -15,6 +15,9 @@ import {
   SCHEMA_VERSION,
   MAX_CODE_LENGTH,
   missingExtras,
+  validateState,
+  stateFromBase,
+  isCustomized,
 } from "../site/src/generator.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -29,6 +32,39 @@ const sway = {
   extras: [],
   choices: { sway: { variant: null }, waybar: { variant: "minimal" } },
 };
+
+test("every base passes the same validation as a user build", () => {
+  assert.ok(catalog.bases.length >= 4, "four bases ship in the catalog");
+  for (const base of catalog.bases) {
+    const { errors } = validateState(stateFromBase(base), catalog);
+    assert.deepEqual(errors, [], `base ${base.id}`);
+  }
+});
+
+test("a base is not customized until something it installs changes", () => {
+  const base = catalog.bases[0];
+  const state = stateFromBase(base);
+  assert.equal(isCustomized(state, base, catalog), false);
+  const changed = { ...state, options: { ...state.options, sway: { ...state.options.sway, gaps_inner: 30 } } };
+  assert.equal(isCustomized(changed, base, catalog), true);
+});
+
+test("the base label round-trips through the payload and is optional", () => {
+  const base = catalog.bases[0];
+  const state = stateFromBase(base);
+  const payload = toPayload(state, catalog.catalog_version);
+  assert.equal(payload.base, base.id);
+  assert.equal(fromPayload(payload, catalog.catalog_version, catalog).state.base, base.id);
+  const plain = toPayload({ ...state, base: undefined }, catalog.catalog_version);
+  assert.equal("base" in plain, false);
+  assert.equal(fromPayload(plain, catalog.catalog_version, catalog).state.base, undefined);
+});
+
+test("the base label does not change the build code", () => {
+  const base = catalog.bases[0];
+  const state = stateFromBase(base);
+  assert.equal(buildCode(state, catalog.catalog_version), buildCode({ ...state, base: undefined }, catalog.catalog_version));
+});
 
 test("payload stores only choices and versions", () => {
   const payload = toPayload(sway, catalog.catalog_version);

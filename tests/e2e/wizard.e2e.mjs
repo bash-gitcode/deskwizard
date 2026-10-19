@@ -68,6 +68,9 @@ async function main() {
 
   // 1. Distro
   await page.goto(base);
+  // The first step is Start: Quick install, Pick a base, or Build your own. This flow builds its own choices.
+  await page.getByRole("heading", { name: "Quick install" }).waitFor();
+  await page.getByRole("button", { name: "Start a blank build" }).click();
   await page.getByRole("heading", { name: "Distro" }).waitFor();
   await page.getByRole("button", { name: "Use this" }).first().click();
   await shot(page, "distro");
@@ -123,7 +126,7 @@ async function main() {
   await variantCards.first().getByRole("button", { name: "Use this" }).click();
   check(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible(), "'Also needs: Nerd Font' appears with Font Awesome only");
   check(await page.locator(".badge[class*='needed-']").first().isVisible(), "needed badge is visible");
-  check((await page.locator("ol.stepper li").count()) === 13, "stepper lists 13 steps: distro, display, compositor, palette, font, 5 tools, Sway settings, start method, review");
+  check((await page.locator("ol.stepper li").count()) === 14, "stepper lists 14 steps: start, distro, display, compositor, palette, font, 5 tools, Sway settings, start method, review");
   await shot(page, "waybar-variant");
   await page.getByRole("listitem").filter({ hasText: "Also needs: Nerd Font" }).getByRole("button", { name: "Add" }).click();
   check(!(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible()), "Nerd Font prompt goes away after Add");
@@ -160,6 +163,8 @@ async function main() {
   await download.saveAs(saved);
   // Load is on the Review step, so start over and rebuild a different choice (Font Awesome only), then load.
   await page.getByRole("button", { name: "Start over" }).click();
+  await page.getByRole("heading", { name: "Quick install" }).waitFor();
+  await page.getByRole("button", { name: "Start a blank build" }).click();
   await page.getByRole("heading", { name: "Distro" }).waitFor();
   await page.getByRole("button", { name: "Use this" }).first().click();
   await next();
@@ -179,6 +184,57 @@ async function main() {
   const reloaded = await page.getByRole("textbox", { name: "Install command" }).inputValue();
   check(reloaded === oneLiner, "Save then Load restores the same build (same install command)");
   await shot(page, "loaded-build");
+
+  // Bases: Quick install fills every step and is not customized. Changing one option marks it customized.
+  // Save then Load round-trips the customized build. Load is on the Review step, so the load page starts there.
+  const basePage = await context.newPage();
+  await basePage.goto(base);
+  await basePage.getByRole("heading", { name: "Quick install" }).waitFor();
+  await basePage.getByRole("button", { name: "Use Quick install" }).click();
+  await basePage.getByRole("heading", { name: "Review" }).waitFor();
+  const baseLine = basePage.getByRole("textbox", { name: "Install command" });
+  await basePage.waitForFunction(() => document.querySelector('textarea[aria-label="Install command"]')?.value.startsWith("curl "), null, { timeout: 10000 });
+  const quickCommand = await baseLine.inputValue();
+  check(await basePage.getByText("Based on Night Bar.", { exact: true }).isVisible(), "Quick install says 'Based on Night Bar.'");
+  check((await basePage.getByText("(customized)", { exact: false }).count()) === 0, "an untouched base is not marked customized");
+  // Back to the Sway settings step and change one number.
+  for (let i = 0; i < 15 && !(await basePage.getByRole("heading", { name: "Sway settings" }).isVisible()); i++) {
+    await basePage.getByRole("button", { name: "Back", exact: true }).click();
+  }
+  await basePage.getByRole("heading", { name: "Sway settings" }).waitFor();
+  const field = basePage.getByRole("spinbutton").first();
+  const cur = Number(await field.inputValue());
+  const max = Number(await field.getAttribute("max"));
+  await field.fill(String(cur + 1 <= max ? cur + 1 : cur - 1));
+  await field.press("Tab");
+  for (let i = 0; i < 15 && !(await basePage.getByRole("heading", { name: "Review" }).isVisible()); i++) {
+    await basePage.getByRole("button", { name: "Next", exact: true }).click();
+  }
+  await basePage.getByRole("heading", { name: "Review" }).waitFor();
+  check(await basePage.getByText("(customized)", { exact: false }).isVisible(), "a changed option marks the build customized");
+  check(await basePage.getByText("Based on Night Bar (customized).", { exact: true }).isVisible(), "Review says 'Based on Night Bar (customized).'");
+  check(await basePage.getByRole("heading", { name: "Keybinds" }).isVisible(), "Review still lists the keybinds after a change");
+  await basePage.waitForFunction((old) => document.querySelector('textarea[aria-label="Install command"]')?.value !== old, quickCommand, { timeout: 10000 });
+  const customCommand = await baseLine.inputValue();
+  check(customCommand !== quickCommand, "the install command changes after the option change");
+  await shot(basePage, "base-customized");
+  const [baseDownload] = await Promise.all([basePage.waitForEvent("download"), basePage.getByRole("button", { name: "Save build (.yaml)" }).click()]);
+  const savedBase = join(SHOTS, "saved-base.yaml");
+  await baseDownload.saveAs(savedBase);
+  // Fresh page, Quick install, then Load: the saved customized build comes back, still marked customized.
+  const loadPage = await context.newPage();
+  await loadPage.goto(base);
+  await loadPage.getByRole("heading", { name: "Quick install" }).waitFor();
+  await loadPage.getByRole("button", { name: "Use Quick install" }).click();
+  await loadPage.getByRole("heading", { name: "Review" }).waitFor();
+  await loadPage.locator("#load-build").setInputFiles(savedBase);
+  await loadPage.waitForFunction((want) => document.querySelector('textarea[aria-label="Install command"]')?.value === want, customCommand, { timeout: 10000 }).then(
+    () => check(true, "Save then Load restores the customized base build (same install command)"),
+    () => check(false, "Save then Load restores the customized base build (same install command)")
+  );
+  check(await loadPage.getByText("(customized)", { exact: false }).isVisible(), "the loaded build is still marked customized");
+  await loadPage.close();
+  await basePage.close();
 
   // Old-version share link: must still open, with the notice
   const oldPayload = toPayload({ distro: "debian13", display: "wayland", font: "jetbrains-mono", choices: { sway: { variant: null }, waybar: { variant: "minimal" } } }, "0.0.1");

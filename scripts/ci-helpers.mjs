@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT } from "./lib/load.mjs";
-import { BAR_EXTRA_PACKAGES, buildCode } from "../site/src/generator.js";
+import { BAR_EXTRA_PACKAGES, buildCode, stateFromBase } from "../site/src/generator.js";
 
 const catalog = JSON.parse(readFileSync(join(ROOT, "site", "public", "catalog.json"), "utf8"));
 const [cmd, start = "manual"] = process.argv.slice(2);
@@ -65,6 +65,14 @@ if (cmd === "packages") {
       catalog.catalog_version,
     ),
   );
+} else if (cmd === "base-code") {
+  // Build code for one catalog base (catalog/bases/<id>.yaml), exactly as the Quick install / Pick a base step builds it.
+  const base = (catalog.bases ?? []).find((b) => b.id === start);
+  if (!base) {
+    console.error(`ci-helpers: unknown base '${start}'`);
+    process.exit(1);
+  }
+  process.stdout.write(buildCode(stateFromBase(base), catalog.catalog_version));
 } else if (cmd === "sway-code") {
   // Build code for the Sway config check: the default build, with every Sway option at its default, min or max.
   // Numbers take min or max; bools take the value that is not the default (false for min, true for max).
@@ -105,6 +113,6 @@ if (cmd === "packages") {
     ),
   );
 } else {
-  console.error("usage: node scripts/ci-helpers.mjs packages|font|code <start>|sway-code <default|min|max>");
+  console.error("usage: node scripts/ci-helpers.mjs packages|font|code <start>|sway-code <default|min|max>|base-code <base id>");
   process.exit(2);
 }

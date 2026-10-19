@@ -13,6 +13,8 @@ import {
   DEFAULT_START,
   MAX_CODE_LENGTH,
   PALETTE_COLOR_TOKENS,
+  stateFromBase,
+  isCustomized,
 } from "./generator.js";
 
 const HASH_KEY = "build=";
@@ -93,6 +95,7 @@ export function startWizard(root, catalog) {
   const addOns = catalog.tools.filter((t) => t.type !== "compositor").sort((a, b) => a.display.order - b.display.order);
 
   const steps = [
+    { id: "begin", title: "Start" },
     { id: "distro", title: "Distro" },
     { id: "display", title: "Display system" },
     { id: "compositor", title: "Compositor" },
@@ -153,6 +156,51 @@ export function startWizard(root, catalog) {
   }
 
   // ---- step renderers -----------------------------------------------------
+  // Quick install, a base, or a blank build. A base fills every later step; the user can change any of them.
+  function beginStep() {
+    const bases = catalog.bases ?? [];
+    const quick = bases[0];
+    return [
+      el("p", {}, "Pick how to start. Every choice can be changed on the next steps."),
+      el(
+        "div",
+        { class: "cards" },
+        el(
+          "div",
+          { class: "card" },
+          el("h3", {}, "Quick install"),
+          quick ? el("p", {}, `${quick.name}: ${quick.description}`) : null,
+          quick
+            ? el("button", { type: "button", class: "primary", onclick: () => { app.state = stateFromBase(quick); app.notices = []; go(steps.length - 1); } }, "Use Quick install")
+            : null
+        ),
+        el(
+          "div",
+          { class: "card" },
+          el("h3", {}, "Build your own"),
+          el("p", {}, "Choose every step yourself, starting from nothing."),
+          el("button", { type: "button", onclick: () => { app.state = freshState(); app.notices = []; go(1); } }, "Start a blank build")
+        )
+      ),
+      el("h3", {}, "Pick a base"),
+      el(
+        "div",
+        { class: "cards" },
+        bases.map((base) =>
+          el(
+            "div",
+            { class: "card" },
+            // Placeholder until the base has a picture.
+            el("div", { class: "placeholder", "aria-hidden": "true" }, base.name),
+            el("h3", {}, base.name),
+            el("p", {}, base.description),
+            el("button", { type: "button", onclick: () => { app.state = stateFromBase(base); app.notices = []; go(1); } }, `Use ${base.name}`)
+          )
+        )
+      ),
+    ];
+  }
+
   function distroStep() {
     return [
       el("p", {}, "Pick the distribution you run. Only Debian 13 “trixie” is supported right now."),
@@ -682,7 +730,9 @@ export function startWizard(root, catalog) {
   function render(moved = false) {
     const step = current();
     const isReview = step.id === "review";
+    const hideNext = isReview || step.id === "begin";
     const body = {
+      begin: beginStep,
       distro: distroStep,
       display: displayStep,
       compositor: compositorStep,
@@ -717,10 +767,15 @@ export function startWizard(root, catalog) {
       "nav",
       { class: "nav" },
       el("button", { type: "button", disabled: app.index === 0, onclick: () => go(app.index - 1) }, "Back"),
-      isReview ? null : el("button", { type: "button", class: "primary", disabled: !canAdvance(), onclick: () => go(app.index + 1) }, "Next")
+      hideNext ? null : el("button", { type: "button", class: "primary", disabled: !canAdvance(), onclick: () => go(app.index + 1) }, "Next")
     );
 
-    const notices = app.notices.map((n) => el("p", { class: "notice", role: "note" }, n));
+    // A build that started from a base says so, and says when it has been customized.
+    const base = app.state.base ? (catalog.bases ?? []).find((b) => b.id === app.state.base) : null;
+    const basedOn = base
+      ? [el("p", { class: "meta" }, `Based on ${base.name}${isCustomized(app.state, base, catalog) ? " (customized)" : ""}.`)]
+      : [];
+    const notices = [...basedOn, ...app.notices.map((n) => el("p", { class: "notice", role: "note" }, n))];
 
     root.replaceChildren(
       el("section", { class: "wizard" }, notices, stepper, el("div", { class: "step" }, heading, content), app.message ? el("p", { role: "status" }, app.message) : null, nav)

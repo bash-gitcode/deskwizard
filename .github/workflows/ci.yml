@@ -300,6 +300,57 @@ jobs:
           grep -qx "$want_border" "$CONF" || { echo "missing: $want_border"; exit 1; }
           echo "sway -C passed; $want_gap, lock after $want_lock seconds and $want_border are written"
 
+  # Each catalog base: a dry-run, then a real install of the base's build code, then sway -C on the generated config.
+  base-config:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    strategy:
+      fail-fast: false
+      matrix:
+        base: [night-bar, forest-floor, paper-desk, ember-compact]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install Node and build the site and installer
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates curl xz-utils
+          npm ci
+          npm run build
+
+      - name: Create a normal user with passwordless sudo (the installer refuses root and uses sudo for apt)
+        run: |
+          apt-get install -y --no-install-recommends sudo sway
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
+          chmod 440 /etc/sudoers.d/builder
+          chown -R builder "$GITHUB_WORKSPACE"
+
+      - name: Dry-run the ${{ matrix.base }} base
+        run: |
+          set -o pipefail
+          CODE="$(node scripts/ci-helpers.mjs base-code ${{ matrix.base }})"
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
+            bash "$GITHUB_WORKSPACE/site/public/v1/install.sh" --build "$CODE" --dry-run 2>&1 | tee base-dry-run.log
+
+      - name: Real install of the ${{ matrix.base }} base
+        run: |
+          set -o pipefail
+          CODE="$(node scripts/ci-helpers.mjs base-code ${{ matrix.base }})"
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
+            DESKWIZARD_TEST_MODE=1 DESKWIZARD_TEST_BASE_URL="file://$GITHUB_WORKSPACE/site/public/v1" \
+            bash "$GITHUB_WORKSPACE/site/public/v1/install.sh" --build "$CODE" 2>&1 | tee install.log
+
+      - name: sway -C accepts the ${{ matrix.base }} base config, and its gaps are written
+        run: |
+          set -o pipefail
+          CONF=/home/builder/.config/sway/config
+          mkdir -p /tmp/xdg-builder && chown builder /tmp/xdg-builder && chmod 700 /tmp/xdg-builder
+          runuser -u builder -- env XDG_RUNTIME_DIR=/tmp/xdg-builder WLR_BACKENDS=headless LIBSEAT_BACKEND=noop sway -C -c "$CONF"
+          want=$(node -e "const c=require('./site/public/catalog.json');const b=c.bases.find(b=>b.id==='${{ matrix.base }}');if(b?.options?.sway?.gaps_inner===undefined)process.exit(1);console.log(b.options.sway.gaps_inner)")
+          grep -qx "gaps inner $want" "$CONF" || { echo "missing: gaps inner $want"; exit 1; }
+          echo "sway -C passed; gaps inner $want written"
+
   full-install:
     runs-on: ubuntu-latest
     container: debian:trixie

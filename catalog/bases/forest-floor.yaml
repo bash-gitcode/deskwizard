@@ -1,0 +1,21 @@
+# A base is a complete starting build. The wizard fills every step from it, and the user can change anything.
+id: forest-floor
+name: Forest Floor
+description: Green forest palette, a ridge wallpaper, a pill-shaped bar and roomy gaps.
+distro: debian13
+display: wayland
+font: fira-code
+palette: forest
+start: manual
+tools:
+  sway: { variant: null }
+  waybar: { variant: pills }
+  foot: { variant: roomy }
+  fuzzel: { variant: wide }
+  mako: { variant: rounded }
+  swaybg: { variant: ridge }
+options:
+  sway:
+    gaps_inner: 16
+    gaps_outer: 8
+    border_width: 2

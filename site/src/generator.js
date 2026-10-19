@@ -528,7 +528,7 @@ export function parseCode(code) {
 export function toPayload(state, catalogVersion) {
   const tools = {};
   for (const [id, choice] of Object.entries(state.choices ?? {})) tools[id] = { variant: choice?.variant ?? null };
-  return {
+  const payload = {
     schema_version: SCHEMA_VERSION,
     catalog_version: catalogVersion,
     choices: {
@@ -542,6 +542,9 @@ export function toPayload(state, catalogVersion) {
       options: cloneOptions(state.options),
     },
   };
+  // The base a build started from is a label only. The choices above are what gets installed.
+  if (state.base) payload.base = state.base;
+  return payload;
 }
 
 // Copies the user's option values: { [tool]: { [key]: value } }.
@@ -613,6 +616,7 @@ export function fromPayload(obj, currentCatalogVersion, catalog) {
         choices: c.tools ?? {},
         // Schema 2 to 4 builds have no options: every option takes its default.
         options: normalizeOptions(c.options ?? {}, catalog),
+        ...(typeof obj.base === "string" ? { base: obj.base } : {}),
       },
       notices,
     };
@@ -638,4 +642,42 @@ export function fromPayload(obj, currentCatalogVersion, catalog) {
   }
 
   throw new Error(`Unknown build format (schema_version ${obj.schema_version ?? "missing"}). Nothing was loaded.`);
+}
+
+// A base is a complete starting build from catalog/bases/*.yaml, in the same shape as the wizard state.
+export function stateFromBase(base) {
+  const choices = {};
+  for (const [id, choice] of Object.entries(base.tools ?? {})) choices[id] = { variant: choice?.variant ?? null };
+  return {
+    distro: base.distro,
+    display: base.display,
+    font: base.font,
+    palette: base.palette ?? DEFAULT_PALETTE,
+    start: base.start ?? DEFAULT_START,
+    extras: [],
+    choices,
+    options: cloneOptions(base.options),
+    base: base.id,
+  };
+}
+
+// What the installer would do with a state: its tools, variants, extras and option values.
+function resolvedBuild(state, catalog) {
+  const { extras, options } = validateState(state, catalog);
+  const tools = Object.keys(state.choices ?? {}).sort().map((id) => [id, state.choices[id]?.variant ?? null]);
+  return {
+    distro: state.distro,
+    display: state.display,
+    font: state.font,
+    palette: state.palette ?? DEFAULT_PALETTE,
+    start: state.start ?? DEFAULT_START,
+    tools,
+    extras,
+    options,
+  };
+}
+
+// A build is customized once anything it installs differs from the base it started from.
+export function isCustomized(state, base, catalog) {
+  return JSON.stringify(resolvedBuild(state, catalog)) !== JSON.stringify(resolvedBuild(stateFromBase(base), catalog));
 }

@@ -1,0 +1,21 @@
+# A base is a complete starting build. The wizard fills every step from it, and the user can change anything.
+id: paper-desk
+name: Paper Desk
+description: Light paper palette, a mono wallpaper, a powerline bar and no gaps.
+distro: debian13
+display: wayland
+font: hack
+palette: paper
+start: manual
+tools:
+  sway: { variant: null }
+  waybar: { variant: powerline }
+  foot: { variant: classic }
+  fuzzel: { variant: quiet }
+  mako: { variant: bottom }
+  swaybg: { variant: mono }
+options:
+  sway:
+    gaps_inner: 0
+    gaps_outer: 0
+    border_width: 0

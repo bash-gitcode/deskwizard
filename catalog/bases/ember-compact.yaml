@@ -1,0 +1,23 @@
+# A base is a complete starting build. The wizard fills every step from it, and the user can change anything.
+id: ember-compact
+name: Ember Compact
+description: Warm ember palette, compact styling for every tool and short screen timers.
+distro: debian13
+display: wayland
+font: jetbrains-mono
+palette: ember
+start: manual
+tools:
+  sway: { variant: null }
+  waybar: { variant: dock-like }
+  foot: { variant: compact }
+  fuzzel: { variant: compact }
+  mako: { variant: compact }
+  swaybg: { variant: dusk }
+options:
+  sway:
+    gaps_inner: 4
+    gaps_outer: 0
+    border_width: 1
+    lock_minutes: 5
+    screen_off_minutes: 8

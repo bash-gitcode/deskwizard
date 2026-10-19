@@ -1,0 +1,21 @@
+# A base is a complete starting build. The wizard fills every step from it, and the user can change anything.
+id: night-bar
+name: Night Bar
+description: Midnight palette, a dusk wallpaper, a minimal bar and small gaps.
+distro: debian13
+display: wayland
+font: jetbrains-mono
+palette: midnight
+start: manual
+tools:
+  sway: { variant: null }
+  waybar: { variant: minimal }
+  foot: { variant: compact }
+  fuzzel: { variant: classic }
+  mako: { variant: corner }
+  swaybg: { variant: dusk }
+options:
+  sway:
+    gaps_inner: 8
+    gaps_outer: 0
+    border_width: 2
