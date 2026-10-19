@@ -23,7 +23,7 @@
   autostart: []
   binds:
     - key: Print
-      command: exec sh -c 'mkdir -p ~/Pictures/Screenshots && grim -g $(slurp) ~/Pictures/Screenshots/$(date +%F_%H%M%S).png'
+      command: exec sh -c 'mkdir -p ~/Pictures/Screenshots && grim -g "$(slurp)" ~/Pictures/Screenshots/$(date +%F_%H%M%S).png'
       label: Screenshot of a region (saved to Pictures/Screenshots)
     - key: Shift+Print
       command: exec sh -c 'mkdir -p ~/Pictures/Screenshots && grim ~/Pictures/Screenshots/$(date +%F_%H%M%S).png'

@@ -80,15 +80,14 @@ async function main() {
 
   // 3. Compositor: Sway
   await page.getByRole("button", { name: "Use this" }).first().click();
-  // Sway tiers: portal and polkit are required (Included, no button); screenshots is recommended (Add); media keys is optional (no prompt).
+  // Sway tiers: portal, polkit, screenshots and media keys are all required extras (Included, no button).
+  // Screenshots and media keys are on by default; their Sway options turn them off.
   check(await page.getByText("Included: Desktop portal (needed because Sway)").isVisible(), "Sway shows the required portal as Included");
   check(await page.getByText("Included: Polkit agent (needed because Sway)").isVisible(), "Sway shows the required polkit agent as Included");
-  const recommended = page.getByRole("listitem").filter({ hasText: "Also recommended: Screenshots" });
-  check(await recommended.getByRole("button", { name: "Add" }).isVisible(), "Sway offers screenshots as Also recommended, with Add");
-  check((await page.getByText("Volume and brightness keys").count()) === 0, "optional media keys are not prompted");
+  check(await page.getByText("Included: Screenshots (grim and slurp) (needed because Sway)").isVisible(), "Sway shows screenshots as Included");
+  check(await page.getByText("Included: Volume and brightness keys (needed because Sway)").isVisible(), "Sway shows media keys as Included");
+  check((await page.getByText("Also recommended:").count()) === 0, "Sway offers no Also recommended extras");
   await shot(page, "compositor");
-  await recommended.getByRole("button", { name: "Add" }).click();
-  check(await page.getByText("Screenshots (grim and slurp) is in your build").isVisible(), "accepted screenshots shows 'is in your build'");
   await next();
 
   // 4. Palette: pick a different palette; the swatch strip shows its colors
