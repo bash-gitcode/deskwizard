@@ -17,15 +17,18 @@ requires: []
 extras:
   - portal
   - polkit
-# Recommended: the wizard offers them with an Add button. media-keys is optional (laptop-only), so it is not listed.
-recommends:
   - screenshot
+  - media-keys
+# Recommended: none. screenshot and media-keys are on by default; each is only in the build while its option is on.
+recommends: []
 packages:
   debian13:
     - sway
     - swaylock
     - swayidle
     - fuzzel
+    - grim
+    - slurp
 difficulty: medium
 ram_mb: 150
 default_variant: null
@@ -47,6 +50,8 @@ options:
   - { key: repeat_rate, label: "Key repeat rate (keys per second)", type: number, default: 30, min: 1, max: 100 }
   - { key: lock_minutes, label: "Lock the screen after this many idle minutes", type: number, default: 10, min: 1, max: 120, scale: 60 }
   - { key: screen_off_minutes, label: "Turn the screen off after this many idle minutes", type: number, default: 15, min: 1, max: 240, scale: 60 }
+  - { key: screenshot_keys, label: "Screenshot keys (Print: a region, Shift+Print: the whole screen)", type: bool, default: true, true_text: "on", false_text: "off" }
+  - { key: media_keys, label: "Volume, brightness and media keys", type: bool, default: true, true_text: "on", false_text: "off" }
 binds:
   - { key: "$mod+Return", command: "exec $term", label: "Open a terminal" }
   - { key: "$mod+Shift+q", command: "kill", label: "Close the focused window" }

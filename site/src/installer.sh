@@ -302,6 +302,15 @@ render_text() {
   printf '%s' "$text" > "$dest"
 }
 
+# extra_on ID: true unless the extra names an option (its `option=` line, e.g. sway.media_keys) and that bool
+# option is off. check_options has already set OPT_BOOL for every bool option.
+extra_on() {
+  local opt
+  opt="$(meta_one "$WORK/files/extras/$1.txt" option)"
+  [ -z "$opt" ] && return 0
+  [ "${OPT_BOOL[$opt]-}" = true ]
+}
+
 # check_options: each opt.<tool>.<key> line must name an option declared in that tool's data file, and its value
 # must fit the declaration. OPT_TEXT gets the text each option writes into its config. Problems go into ERRORS,
 # so nothing is written. Options that were not set take their declared default.
@@ -309,6 +318,7 @@ check_options() {
   local t otag key type def min max scale pat on off value text s k
   local -A declared=()
   declare -gA OPT_TEXT=()
+  declare -gA OPT_BOOL=()
   for t in "${TOOL_IDS[@]}"; do
     while IFS=$'\t' read -r otag key type def min max scale pat on off; do
       [ "$otag" = option ] || continue
@@ -346,6 +356,7 @@ check_options() {
           ;;
         *) ERRORS+=("$t option '$key' has an unknown type. Nothing was changed."); continue ;;
       esac
+      if [ "$type" = bool ]; then OPT_BOOL["$t.$key"]="$value"; fi
       OPT_TEXT["$t.$key"]="$text"
     done < <(rows "$WORK/files/tools/$t.txt" option)
   done
@@ -435,6 +446,12 @@ build_plan() {
     done
   done
   mapfile -t wanted < <(for ex in "${wanted[@]}"; do printf '%s %s\n' "$(meta_one "$WORK/files/extras/$ex.txt" order)" "$ex"; done | sort -n | cut -d' ' -f2)
+  # An extra with an option is only in the build while that option is on (packages, binds and autostart).
+  local -a on_wanted=()
+  for ex in "${wanted[@]}"; do
+    if extra_on "$ex"; then on_wanted+=("$ex"); fi
+  done
+  wanted=("${on_wanted[@]}")
   for ex in "${wanted[@]}"; do
     for pkg in $(meta_list "$WORK/files/extras/$ex.txt" "package.${CODE[distro]}"); do add_pkg "$pkg"; done
   done

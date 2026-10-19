@@ -231,8 +231,15 @@ export function validateState(state, catalog) {
   }
   const wanted = new Set(accepted);
   for (const tool of chosen) for (const id of tool.extras ?? []) wanted.add(id);
+  const options = resolveOptions(state?.options, chosen, errors);
+  // An extra with `option` (e.g. "sway.media_keys") is in the build only while that bool option is on.
+  const optionOn = (e) => {
+    if (!e.option) return true;
+    const [toolId, key] = e.option.split(".");
+    return options[toolId]?.[key] === true;
+  };
   // Catalog order, so the installer can produce the same order from the manifest.
-  const extras = (catalog.extras ?? []).map((e) => e.id).filter((id) => wanted.has(id));
+  const extras = (catalog.extras ?? []).filter((e) => wanted.has(e.id) && optionOn(e)).map((e) => e.id);
 
   const compositors = chosen.filter((t) => t.type === "compositor");
   if (compositors.length !== 1) errors.push("Choose exactly one compositor (Sway).");
@@ -253,7 +260,6 @@ export function validateState(state, catalog) {
       }
     }
   }
-  const options = resolveOptions(state?.options, chosen, errors);
   return { errors, chosen, distro, font, palette, start, extras, options };
 }
 

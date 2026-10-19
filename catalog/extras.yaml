@@ -17,9 +17,9 @@
   binds: []
 - id: screenshot
   name: Screenshots (grim and slurp)
-  reason: Lets you pick a region of the screen and save it as a PNG.
-  packages:
-    debian13: [grim, slurp]
+  reason: Lets you pick a region of the screen and save it as a PNG. grim and slurp come with Sway's packages.
+  option: sway.screenshot_keys
+  packages: {}
   autostart: []
   binds:
     - key: Print
@@ -31,6 +31,7 @@
 - id: media-keys
   name: Volume and brightness keys
   reason: Makes the keyboard volume and brightness keys work.
+  option: sway.media_keys
   packages:
     debian13: [pulseaudio-utils, brightnessctl, playerctl]
   autostart: []

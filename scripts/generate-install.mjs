@@ -114,6 +114,7 @@ catalog.extras.forEach((e, i) => {
     `files/extras/${e.id}.txt`,
     [
       `order=${i}`,
+      ...(e.option ? [`option=${e.option}`] : []),
       ...DISTROS.flatMap((d) => (e.packages[d] ?? []).map((p) => `package.${d}=${p}`)),
       ...e.autostart.map((a) => `autostart=${a}`),
     ]

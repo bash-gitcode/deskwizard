@@ -138,25 +138,22 @@ test("required extras are always in the plan, and are not offered as recommended
   assert.ok(!missingExtras(swayOnly, catalog).includes("polkit"));
 });
 
-test("recommended extras are offered, not installed, until the user adds them", () => {
+test("screenshot and media keys are on by default, with their packages and binds", () => {
   const plan = planOf(swayOnly);
-  assert.deepEqual(missingExtras(swayOnly, catalog), ["screenshot"]);
-  assert.ok(!plan.packages.includes("slurp"), "screenshot tools are not installed unless accepted");
-  assert.ok(!plan.binds.some((b) => b.key === "Print"));
-});
-
-test("an accepted recommended extra is installed with its binds", () => {
-  const state = { ...swayOnly, extras: ["screenshot"] };
-  const plan = planOf(state);
-  assert.ok(plan.packages.includes("slurp"));
+  assert.deepEqual(missingExtras(swayOnly, catalog), []);
+  assert.ok(plan.packages.includes("grim") && plan.packages.includes("slurp"), "grim and slurp are in the Sway packages");
+  assert.ok(plan.packages.includes("brightnessctl") && plan.packages.includes("playerctl"));
   assert.ok(plan.binds.some((b) => b.key === "Print"));
-  assert.deepEqual(missingExtras(state, catalog), []);
+  assert.ok(plan.binds.some((b) => b.key === "Shift+Print"));
+  assert.ok(plan.binds.some((b) => b.key === "XF86AudioRaiseVolume"));
 });
 
-test("optional extras are never prompted or installed by default", () => {
-  const plan = planOf(swayOnly);
-  assert.ok(!missingExtras(swayOnly, catalog).includes("media-keys"));
-  assert.ok(!plan.packages.includes("brightnessctl"));
+test("turning the screenshot or media option off removes its packages and binds", () => {
+  const state = { ...swayOnly, options: { sway: { screenshot_keys: false, media_keys: false } } };
+  const plan = planOf(state);
+  assert.ok(!plan.packages.includes("brightnessctl") && !plan.packages.includes("playerctl"));
+  assert.ok(!plan.binds.some((b) => b.key === "Print" || b.key === "XF86AudioRaiseVolume"));
+  assert.ok(plan.binds.some((b) => b.key === "$mod+Return"));
 });
 
 // Schema 5 options. A schema 4 build code (no option lines) must keep loading and take the defaults.
