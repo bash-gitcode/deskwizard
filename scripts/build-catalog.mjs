@@ -86,6 +86,7 @@ for (const tool of cat.tools) {
     command: data.command ?? null,
     autostart: data.autostart ?? [],
     binds: data.binds ?? [],
+    options: data.options ?? [],
     packages: data.packages,
     difficulty: data.difficulty,
     ram_mb: data.ram_mb,

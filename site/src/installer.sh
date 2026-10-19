@@ -117,13 +117,15 @@ fetch() {
 # ---- build code (parsed as data) ---------------------------------------------
 declare -A CODE=()
 declare -A TOOL_VARIANT=()
+declare -A OPT_VALUES=()
+OPT_KEYS=()
 EXTRAS=()
 TOOL_IDS=()
 
 # parse_code: checks the length and characters, decodes base64url, and reads key=value lines. Never runs them.
 parse_code() {
   local code="$1" padded line key value lines=0 last
-  local re='^(schema|catalog|distro|display|font|palette|start|extra|tool\.[a-z][a-z0-9-]*)=([a-z0-9._-]{1,64})$'
+  local re='^(schema|catalog|distro|display|font|palette|start|extra|tool\.[a-z][a-z0-9-]*|opt\.[a-z][a-z0-9-]*\.[a-z][a-z0-9_]*)=([a-z0-9._,-]{1,64})$'
   [ -n "$code" ] || die "the build code is empty. Copy the install command from the wizard's Review step."
   [ "${#code}" -le "$MAX_CODE_LENGTH" ] || die "the build code is longer than $MAX_CODE_LENGTH characters. Nothing was changed."
   case "$code" in
@@ -160,6 +162,12 @@ parse_code() {
         TOOL_VARIANT[$key]="$value"
         TOOL_IDS+=("$key")
         ;;
+      opt.*)
+        optk="${key#opt.}"
+        [ -z "${OPT_VALUES[$optk]+x}" ] || die "the build code repeats option '$optk'. Nothing was changed."
+        OPT_VALUES[$optk]="$value"
+        OPT_KEYS+=("$optk")
+        ;;
       *)
         [ -z "${CODE[$key]+x}" ] || die "the build code repeats '$key'. Nothing was changed."
         CODE[$key]="$value"
@@ -170,7 +178,11 @@ parse_code() {
   for key in schema catalog distro display font palette start; do
     [ -n "${CODE[$key]+x}" ] || die "the build code is missing '$key'. Nothing was changed."
   done
-  [ "${CODE[schema]}" = "4" ] || die "unsupported build code schema ${CODE[schema]}. Make the build again in the wizard."
+  case "${CODE[schema]}" in
+    4) [ "${#OPT_KEYS[@]}" -eq 0 ] || die "the build code is malformed (schema 4 has no option lines). Nothing was changed." ;;
+    5) ;;
+    *) die "unsupported build code schema ${CODE[schema]}. Make the build again in the wizard." ;;
+  esac
 }
 
 # id_known KIND ID: true if manifest.json lists "KIND ID" as an id.
@@ -278,10 +290,68 @@ render_text() {
   fi
   text="${text//'"{{NERD_FONT}}", '/"$FONT_FAMILY_PREFIX"}"
   text="${text//'{{BAR_BLOCK}}'/"$BAR_BLOCK"}"
+  for name in "${!OPT_TEXT[@]}"; do
+    text="${text//"{{OPT:$name}}"/"${OPT_TEXT[$name]}"}"
+  done
+  for name in bg surface fg muted accent accent2 warn error; do
+    text="${text//"{{PAL:$name}}"/"${PALETTE[$name]}"}"
+  done
   text="${text//'{{BINDS}}'/"$BINDS_BLOCK"}"
   text="${text//'{{EXEC}}'/"$EXEC_BLOCK"}"
   text="${text//'{{TERM_CMD}}'/"$TERM_CMD"}"
   printf '%s' "$text" > "$dest"
+}
+
+# check_options: each opt.<tool>.<key> line must name an option declared in that tool's data file, and its value
+# must fit the declaration. OPT_TEXT gets the text each option writes into its config. Problems go into ERRORS,
+# so nothing is written. Options that were not set take their declared default.
+check_options() {
+  local t otag key type def min max scale pat on off value text s k
+  local -A declared=()
+  declare -gA OPT_TEXT=()
+  for t in "${TOOL_IDS[@]}"; do
+    while IFS=$'\t' read -r otag key type def min max scale pat on off; do
+      [ "$otag" = option ] || continue
+      declared["$t.$key"]=1
+      value="${OPT_VALUES[$t.$key]-$def}"
+      if ! [[ "$value" =~ ^[a-z0-9._,-]{1,64}$ ]]; then
+        ERRORS+=("$t option '$key' has characters that are not allowed. Nothing was changed.")
+        continue
+      fi
+      case "$type" in
+        number)
+          if [[ "$value" =~ ^[0-9]{1,6}$ ]] && [ "$value" -ge "$min" ] && [ "$value" -le "$max" ]; then
+            s=1
+            [ "$scale" = - ] || s="$scale"
+            text=$(( value * s ))
+          else
+            ERRORS+=("$t option '$key' must be a whole number from $min to $max. Nothing was changed.")
+            continue
+          fi
+          ;;
+        bool)
+          case "$value" in
+            true) text="$on" ;;
+            false) text="$off" ;;
+            *) ERRORS+=("$t option '$key' must be on or off. Nothing was changed."); continue ;;
+          esac
+          ;;
+        string-id)
+          if [[ "$value" =~ $pat ]]; then
+            text="$value"
+          else
+            ERRORS+=("$t option '$key' has a value that is not allowed. Nothing was changed.")
+            continue
+          fi
+          ;;
+        *) ERRORS+=("$t option '$key' has an unknown type. Nothing was changed."); continue ;;
+      esac
+      OPT_TEXT["$t.$key"]="$text"
+    done < <(rows "$WORK/files/tools/$t.txt" option)
+  done
+  for k in "${OPT_KEYS[@]}"; do
+    [ -n "${declared[$k]+x}" ] || ERRORS+=("unknown option '${k#*.}' for ${k%%.*} in the build code. Nothing was changed.")
+  done
 }
 
 build_plan() {
@@ -301,6 +371,8 @@ build_plan() {
     TOKEN_NAMES+=("$key")
   done < "$WORK/files/palettes/${CODE[palette]}.txt"
   mapfile -t TOKEN_NAMES < <(printf '%s\n' "${TOKEN_NAMES[@]}" | awk '{ print length, $0 }' | sort -rn | cut -d' ' -f2-)
+
+  check_options
 
   # Chosen tools in display order.
   mapfile -t chosen < <(for t in "${TOOL_IDS[@]}"; do printf '%s %s\n' "$(meta_one "$WORK/files/tools/$t.txt" order)" "$t"; done | sort -n | cut -d' ' -f2)

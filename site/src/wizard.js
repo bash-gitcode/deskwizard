@@ -99,11 +99,13 @@ export function startWizard(root, catalog) {
     { id: "palette", title: "Palette" },
     { id: "font", title: "Font" },
     ...addOns.map((tool) => ({ id: `tool:${tool.id}`, title: tool.name, tool })),
+    // Settings for a tool, e.g. "Sway settings". Shown for each compositor that declares options.
+    ...compositors.filter((t) => t.options?.length).map((tool) => ({ id: `options:${tool.id}`, title: `${tool.name} settings`, tool })),
     { id: "start", title: "Start method" },
     { id: "review", title: "Review" },
   ];
 
-  const freshState = () => ({ distro: null, display: "wayland", font: catalog.fonts.default, palette: DEFAULT_PALETTE, start: DEFAULT_START, extras: [], choices: {} });
+  const freshState = () => ({ distro: null, display: "wayland", font: catalog.fonts.default, palette: DEFAULT_PALETTE, start: DEFAULT_START, extras: [], choices: {}, options: {} });
   // Fills a missing font, palette or extras list (older formats) with defaults, so every build has all three.
   const withDefaults = (state) => ({
     ...state,
@@ -111,6 +113,7 @@ export function startWizard(root, catalog) {
     palette: state.palette ?? DEFAULT_PALETTE,
     extras: state.extras ?? [],
     start: state.start ?? DEFAULT_START,
+    options: state.options ?? {},
   });
 
   const app = { state: freshState(), index: 0, message: "", notices: [] };
@@ -504,6 +507,67 @@ export function startWizard(root, catalog) {
     ];
   }
 
+  // One control per option the tool declares. Defaults are preselected; only values that differ from the default are kept.
+  function optionsStep(tool) {
+    if (!app.state.choices[tool.id]) {
+      return [el("p", { class: "warn", role: "alert" }, `Choose ${tool.name} on the Compositor step first. Its settings are used only when it is chosen.`)];
+    }
+    const stored = app.state.options?.[tool.id] ?? {};
+    const setValue = (def, value) => {
+      app.state.options ??= {};
+      const obj = (app.state.options[tool.id] ??= {});
+      if (value === def.default) delete obj[def.key];
+      else obj[def.key] = value;
+      if (Object.keys(obj).length === 0) delete app.state.options[tool.id];
+      sync();
+    };
+    const control = (def) => {
+      const current = stored[def.key] ?? def.default;
+      if (def.type === "bool") {
+        return el("input", {
+          type: "checkbox",
+          checked: current === true,
+          onchange: (e) => setValue(def, e.target.checked),
+        });
+      }
+      if (def.type === "number") {
+        return el("input", {
+          type: "number",
+          min: def.min,
+          max: def.max,
+          step: 1,
+          value: current,
+          onchange: (e) => {
+            const raw = e.target.value.trim();
+            // Whole numbers are stored as numbers. Anything else is kept as typed, and the Review step reports it.
+            setValue(def, /^[0-9]+$/.test(raw) ? Number(raw) : raw);
+          },
+        });
+      }
+      const pattern = new RegExp(def.pattern);
+      const field = el("input", {
+        type: "text",
+        value: current,
+        onchange: (e) => setValue(def, e.target.value.trim()),
+      });
+      const hint = el("p", { class: "meta", role: "status" }, "");
+      field.addEventListener("input", () => {
+        hint.textContent = pattern.test(field.value.trim()) ? "" : "This value is not allowed. Example: us or us,de.";
+      });
+      return el("span", {}, field, hint);
+    };
+    return [
+      el("p", {}, `Settings for ${tool.name}. The defaults are selected. Change only what you need.`),
+      el(
+        "ul",
+        { class: "extras" },
+        tool.options.map((def) =>
+          el("li", {}, el("label", { class: "option" }, el("span", { text: def.label }), " ", control(def)))
+        )
+      ),
+    ];
+  }
+
   function reviewStep() {
     const { ok, errors, plan } = buildPlan(app.state, catalog);
     if (!ok) {
@@ -627,7 +691,7 @@ export function startWizard(root, catalog) {
       start: startStep,
       review: reviewStep,
     }[step.id];
-    const content = body ? body() : toolStep(step.tool);
+    const content = body ? body() : step.id.startsWith("options:") ? optionsStep(step.tool) : toolStep(step.tool);
 
     const heading = el("h2", { tabindex: "-1", id: "step-heading" }, step.title);
     const stepper = el(

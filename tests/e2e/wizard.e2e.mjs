@@ -124,7 +124,7 @@ async function main() {
   await variantCards.first().getByRole("button", { name: "Use this" }).click();
   check(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible(), "'Also needs: Nerd Font' appears with Font Awesome only");
   check(await page.locator(".badge[class*='needed-']").first().isVisible(), "needed badge is visible");
-  check((await page.locator("ol.stepper li").count()) === 12, "stepper lists 12 steps: distro, display, compositor, palette, font, 5 tools, start method, review");
+  check((await page.locator("ol.stepper li").count()) === 13, "stepper lists 13 steps: distro, display, compositor, palette, font, 5 tools, Sway settings, start method, review");
   await shot(page, "waybar-variant");
   await page.getByRole("listitem").filter({ hasText: "Also needs: Nerd Font" }).getByRole("button", { name: "Add" }).click();
   check(!(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible()), "Nerd Font prompt goes away after Add");

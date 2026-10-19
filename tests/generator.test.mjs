@@ -35,7 +35,7 @@ test("payload stores only choices and versions", () => {
   assert.equal(payload.schema_version, SCHEMA_VERSION);
   assert.equal(payload.catalog_version, catalog.catalog_version);
   assert.deepEqual(Object.keys(payload).sort(), ["catalog_version", "choices", "schema_version"]);
-  assert.deepEqual(Object.keys(payload.choices).sort(), ["display", "distro", "extras", "font", "palette", "start_method", "tools"]);
+  assert.deepEqual(Object.keys(payload.choices).sort(), ["display", "distro", "extras", "font", "options", "palette", "start_method", "tools"]);
 });
 
 test("schema 4 round trip keeps the build, including start_method", () => {
@@ -157,6 +157,90 @@ test("optional extras are never prompted or installed by default", () => {
   const plan = planOf(swayOnly);
   assert.ok(!missingExtras(swayOnly, catalog).includes("media-keys"));
   assert.ok(!plan.packages.includes("brightnessctl"));
+});
+
+// Schema 5 options. A schema 4 build code (no option lines) must keep loading and take the defaults.
+// Build codes are base64url without padding.
+const base64url = (text) => toBase64(text).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const schema4Code = base64url(
+  [
+    "schema=4",
+    `catalog=${catalog.catalog_version}`,
+    "distro=debian13",
+    "display=wayland",
+    "font=jetbrains-mono",
+    "palette=midnight",
+    "start=manual",
+    "tool.sway=-",
+    "tool.waybar=minimal",
+  ].join("\n") + "\n"
+);
+
+test("a stored schema 4 build code loads and takes the option defaults", () => {
+  const { state, notices } = fromPayload(parseCode(schema4Code), catalog.catalog_version, catalog);
+  assert.deepEqual(notices, []);
+  assert.equal(state.start, "manual");
+  assert.equal(state.choices.waybar.variant, "minimal");
+  const plan = planOf(state);
+  assert.ok(plan.packages.includes("sway"));
+});
+
+test("a schema 4 saved YAML (payload without options) loads and takes the option defaults", () => {
+  const saved = toPayload(swayOnly, catalog.catalog_version);
+  const v4 = { ...saved, schema_version: 4, choices: { ...saved.choices } };
+  delete v4.choices.options;
+  const { state, notices } = fromPayload(v4, catalog.catalog_version, catalog);
+  assert.deepEqual(notices, []);
+  assert.deepEqual(state.options, {});
+  assert.ok(planOf(state).packages.includes("sway"));
+});
+
+test("a schema 4 build code with option lines is refused", () => {
+  const withOpt = base64url(`schema=4\nopt.sway.gaps_inner=12\ncatalog=${catalog.catalog_version}\ndistro=debian13\ndisplay=wayland\nfont=jetbrains-mono\npalette=midnight\nstart=manual\ntool.sway=-\n`);
+  assert.throws(() => parseCode(withOpt), /schema 4 has no options/);
+});
+
+test("schema 5 options round trip through the build code and the payload", () => {
+  const state = { ...swayOnly, options: { sway: { gaps_inner: 12, smart_gaps: false, keyboard_layout: "us,de", lock_minutes: 5 } } };
+  const code = buildCode(state, catalog.catalog_version);
+  const payload = parseCode(code);
+  assert.equal(payload.schema_version, 5);
+  const { state: back, notices } = fromPayload(payload, catalog.catalog_version, catalog);
+  assert.deepEqual(notices, []);
+  assert.equal(back.options.sway.gaps_inner, 12);
+  assert.equal(back.options.sway.smart_gaps, false);
+  assert.equal(back.options.sway.keyboard_layout, "us,de");
+  assert.equal(back.options.sway.lock_minutes, 5);
+});
+
+test("schema 5 option values are written into sway.conf with their text", () => {
+  const plan = planOf({ ...swayOnly, options: { sway: { gaps_inner: 12, smart_gaps: false, lock_minutes: 5 } } });
+  const conf = plan.files.find((f) => /sway\/config$/.test(f.target)).content;
+  assert.match(conf, /^gaps inner 12$/m);
+  assert.match(conf, /^smart_gaps off$/m);
+  assert.match(conf, /timeout 300 /);
+  assert.doesNotMatch(conf, /\{\{(OPT|PAL):/);
+});
+
+test("unknown option, out of range, bad pattern and shell characters are each rejected", () => {
+  const bad = [
+    [{ sway: { no_such_option: 1 } }, /Unknown option 'no_such_option'/],
+    [{ sway: { gaps_inner: 999 } }, /must be from 0 to 50/],
+    [{ sway: { gaps_inner: 1.5 } }, /whole number/],
+    [{ sway: { keyboard_layout: "US!" } }, /not allowed/],
+    [{ sway: { keyboard_layout: "us;rm" } }, /not allowed/],
+    [{ sway: { smart_gaps: "yes" } }, /on or off/],
+    [{ waybar: { gaps_inner: 1 } }, /not in the build/],
+  ];
+  for (const [options, pattern] of bad) {
+    const result = buildPlan({ ...swayOnly, options }, catalog);
+    assert.equal(result.ok, false, JSON.stringify(options));
+    assert.ok(result.errors.some((e) => pattern.test(e)), `${JSON.stringify(options)}: ${result.errors.join("; ")}`);
+  }
+});
+
+test("an oversized build code is refused whatever the options are", () => {
+  assert.throws(() => parseCode("A".repeat(MAX_CODE_LENGTH + 1)), /longer than/);
 });
 
 test("start methods: greetd adds greetd and tuigreet packages, manual adds none", () => {

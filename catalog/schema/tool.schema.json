@@ -40,6 +40,26 @@
     "extras": { "type": "array", "items": { "type": "string" } },
     "recommends": { "type": "array", "items": { "type": "string" } },
     "autostart": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "label", "type", "default"],
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "label": { "type": "string", "minLength": 1 },
+          "type": { "enum": ["number", "bool", "string-id"] },
+          "default": { "type": ["integer", "boolean", "string"] },
+          "min": { "type": "integer" },
+          "max": { "type": "integer" },
+          "scale": { "type": "integer", "minimum": 1 },
+          "pattern": { "type": "string", "minLength": 1 },
+          "true_text": { "type": "string", "pattern": "^[a-z]+$" },
+          "false_text": { "type": "string", "pattern": "^[a-z]+$" }
+        }
+      }
+    },
     "binds": {
       "type": "array",
       "items": {
