@@ -27,11 +27,14 @@ const palettes = readdirSync(join(CATALOG, "palettes"))
   .sort()
   .map((n) => readYaml(join(CATALOG, "palettes", n)));
 
-// Bases are complete starting builds (catalog/bases/*.yaml). The first one is the Quick install choice.
+// Bases are complete starting builds (catalog/bases/*.yaml). QUICK_BASE is the Quick install choice and is listed first.
+const QUICK_BASE = "night-bar";
 const bases = readdirSync(join(CATALOG, "bases"))
   .filter((n) => n.endsWith(".yaml"))
   .sort()
-  .map((n) => readYaml(join(CATALOG, "bases", n)));
+  .map((n) => readYaml(join(CATALOG, "bases", n)))
+  .sort((a, b) => (a.id === QUICK_BASE ? -1 : b.id === QUICK_BASE ? 1 : 0));
+if (!bases.some((b) => b.id === QUICK_BASE)) throw new Error(`build-catalog: no base with id '${QUICK_BASE}' for Quick install`);
 
 // Clean output so removed tools/variants do not linger in the site.
 rmSync(OUT_ASSETS, { recursive: true, force: true });

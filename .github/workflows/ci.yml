@@ -331,6 +331,7 @@ jobs:
           set -o pipefail
           CODE="$(node scripts/ci-helpers.mjs base-code ${{ matrix.base }})"
           runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
+            DESKWIZARD_TEST_MODE=1 DESKWIZARD_TEST_BASE_URL="file://$GITHUB_WORKSPACE/site/public/v1" \
             bash "$GITHUB_WORKSPACE/site/public/v1/install.sh" --build "$CODE" --dry-run 2>&1 | tee base-dry-run.log
 
       - name: Real install of the ${{ matrix.base }} base
