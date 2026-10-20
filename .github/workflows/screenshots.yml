@@ -58,6 +58,9 @@ jobs:
       - name: Each swaybg capture is its own wallpaper (fails if the terminal shows instead)
         run: python3 scripts/shots/check-wallpapers.py scene-raw
 
+      - name: No two scene images are byte-identical unless scripts/shots/duplicates.json allows it
+        run: python3 scripts/shots/check-duplicates.py scene-shots
+
       - name: Write the image sizes to the job summary
         if: always()
         run: |

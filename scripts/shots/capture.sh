@@ -129,6 +129,10 @@ run_scene() { # run_scene LABEL BASE [TOOL VARIANT]
   sleep 2
   foot sh "$DEMO" > /dev/null 2>&1 &
   sleep 4
+  # The crop uses the leftmost foot window. Sway focuses the right-hand one, and an unfocused foot draws its cursor
+  # as a hollow box whatever the cursor style, so the cursor-style variants looked identical. Focus the left window.
+  swaymsg focus left > /dev/null 2>&1 || FAILS+=("$label: could not focus the left foot window")
+  sleep 1
 
   local missing=""
   for t in swaybg waybar mako foot; do pgrep -x "$t" >/dev/null || missing="$missing $t"; done
