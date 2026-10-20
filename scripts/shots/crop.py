@@ -11,7 +11,7 @@ Crop method per tool (no hard-coded pixels):
 A base scene is saved as its full frame (desktop.png).
 
 Images are named base-<id>.webp and <tool>-<variant>.webp in <out-dir>. Each image must be under 200 KB; the
-WebP quality is lowered (80 down to 50) until it is under 150 KB. Sizes are printed and appended to the job summary.
+WebP quality is lowered (80 down to 50) until it is under 150 KB. Sizes are printed and written to <out-dir>/sizes.md.
 Usage: python3 scripts/shots/crop.py <raw-dir> <out-dir>
 Exit status 1 if any image could not be produced or is over the size limit; the problems are printed.
 """
@@ -167,9 +167,9 @@ for name, w, h, quality, size in rows:
     lines.append(f"| {name} | {w}x{h} | {quality} | {size / 1024:.1f} |")
 table = "\n".join(lines) + "\n"
 print(table)
-if os.environ.get("GITHUB_STEP_SUMMARY"):
-    with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
-        f.write(table + "\n")
+# The job summary is written by a later step: this runs as a non-root user that cannot write to it.
+with open(os.path.join(out_dir, "sizes.md"), "w") as f:
+    f.write(table)
 
 if problems:
     print(f"crop: {len(problems)} problem(s):", file=sys.stderr)
