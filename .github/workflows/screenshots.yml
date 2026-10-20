@@ -44,6 +44,9 @@ jobs:
           runuser -u builder -- tar -xJf "/tmp/${NERD_FONT_ARCHIVE}" -C "$dest"
           fc-cache -f /home/builder/.local/share/fonts
 
+      - name: Guard self-tests (each guard must fail on a planted bad input)
+        run: node scripts/guard-selftest.mjs
+
       - name: Capture every scene on headless Sway
         run: |
           # dbus-run-session gives sway and the tools a session bus.

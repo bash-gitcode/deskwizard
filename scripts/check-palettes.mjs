@@ -34,7 +34,8 @@ const DENYLIST = {
   "859900": "Solarized",
 };
 
-const dir = join(CATALOG, "palettes");
+// Optional folder argument: the self-test (scripts/guard-selftest.mjs) points the guard at a temp folder.
+const dir = process.argv[2] ?? join(CATALOG, "palettes");
 const hits = [];
 let checked = 0;
 for (const name of readdirSync(dir).filter((n) => n.endsWith(".yaml")).sort()) {
