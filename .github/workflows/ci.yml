@@ -33,6 +33,9 @@ jobs:
       - name: Every catalog file is referenced by a tool or variant (fails on orphans)
         run: npm run -s check-catalog-refs
 
+      - name: Palettes must not copy a well-known theme (denylist)
+        run: node scripts/check-palettes.mjs
+
       - name: Built manifest and installer match the files on disk (fails if out of date)
         run: npm run -s check-manifest
 
@@ -221,6 +224,10 @@ jobs:
   # Job B: every variant of waybar, foot, fuzzel, mako and swaybg runs under headless Sway (see smoke.yml).
   tool-smoke:
     uses: ./.github/workflows/smoke.yml
+
+  # The scene images on the site (base scenes and tool crops). The Pages build and wizard-e2e use them.
+  scene-shots:
+    uses: ./.github/workflows/screenshots.yml
 
   # On pull requests, the e2e job runs only when site/ or catalog/ changed. Pushes to main always run it.
   changes:
@@ -539,7 +546,7 @@ jobs:
 
   # Job C: click through the wizard in headless Chromium and save a screenshot per step.
   wizard-e2e:
-    needs: changes
+    needs: [changes, scene-shots]
     if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -550,10 +557,24 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Build the site
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download the scene images
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: scene-shots
+          path: scene-shots
+
+      # The catalog must exist before the images are checked against it. Fails if any image is missing.
+      - name: Copy the scene images into the site
         run: |
-          npm ci
-          npm run build
+          npm run -s render-wallpapers
+          npm run -s build-catalog
+          node scripts/copy-screenshots.mjs scene-shots
+
+      - name: Build the site
+        run: npm run build
 
       - name: Install Playwright (CI only, not a repo dependency) and Chromium
         run: |

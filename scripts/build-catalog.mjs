@@ -3,7 +3,7 @@
 // Config and style files are inlined so the browser and the installer need no extra fetches.
 // Screenshots are copied to site/public/catalog/. Every referenced file must exist.
 // Run with: npm run build-catalog
-import { existsSync, mkdirSync, writeFileSync, copyFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT, CATALOG, loadCatalog, readYaml, readText, rel } from "./lib/load.mjs";
 import { validateState } from "../site/src/generator.js";
@@ -63,10 +63,8 @@ for (const tool of cat.tools) {
         vfiles[item.source] = item.binary ? readFileSync(src).toString("base64") : readText(src);
       }
     }
-    const shotSrc = requireFile(join(v.path, meta.screenshot), `screenshot of ${data.id}/${meta.id}`);
-    const shotRel = `catalog/${data.id}/${meta.id}/${meta.screenshot}`;
-    mkdirSync(join(OUT_DIR, "catalog", data.id, meta.id), { recursive: true });
-    copyFileSync(shotSrc, join(OUT_DIR, shotRel));
+    // Scene images are made by scripts/shots (crop.py) and copied to site/public/screenshots by copy-screenshots.mjs.
+    const shotRel = `screenshots/${data.id}-${meta.id}.webp`;
 
     variants.push({
       id: meta.id,
@@ -77,6 +75,7 @@ for (const tool of cat.tools) {
       requires: meta.requires,
       options: meta.options,
       screenshot: shotRel,
+      screenshot_alt: `${data.name} ${meta.name}: a crop of a sample Sway desktop showing this variant`,
       files: vfiles,
     });
   }
@@ -124,7 +123,11 @@ const catalog = {
   extras,
   palettes,
   start_methods: startMethods,
-  bases,
+  bases: bases.map((b) => ({
+    ...b,
+    image: `screenshots/base-${b.id}.webp`,
+    image_alt: `${b.name} base: a full sample desktop with a bar, two terminals and notifications`,
+  })),
   tools: tools.sort((a, b) => a.display.order - b.display.order),
 };
 

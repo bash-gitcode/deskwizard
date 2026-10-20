@@ -1,0 +1,71 @@
+name: scene-shots
+
+# Reusable: called by ci.yml (every PR and push) and pages.yml (the site needs the images before it is built).
+# Captures one scene per base and one per tool variant on headless Sway at 1920x1080, then crops them into WebP
+# images (scripts/shots/crop.py). Uploads "scene-shots" (the images) and "scene-raw" (raw captures and logs).
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scene-shots:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install Node and build the catalog
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs npm ca-certificates
+          npm ci
+          npm run -s render-wallpapers
+          node scripts/validate.mjs
+          node scripts/build-catalog.mjs
+
+      - name: Install Sway, the tools, jq, notify-send and Pillow
+        run: |
+          apt-get install -y --no-install-recommends sway xwayland grim procps curl xz-utils jq libnotify-bin python3-pil \
+            fontconfig dbus-daemon dbus-user-session $(node scripts/ci-helpers.mjs packages)
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+
+      - name: Install the pinned default Nerd Font (checksum must match)
+        run: |
+          eval "$(node scripts/ci-helpers.mjs font)"
+          url="https://github.com/ryanoasis/nerd-fonts/releases/download/${NERD_FONT_VERSION}/${NERD_FONT_ARCHIVE}"
+          curl -fsSL -o "/tmp/${NERD_FONT_ARCHIVE}" "$url"
+          echo "${NERD_FONT_SHA256}  /tmp/${NERD_FONT_ARCHIVE}" | sha256sum -c -
+          dest="/home/builder/.local/share/fonts/NerdFonts/${NERD_FONT_DEST}"
+          runuser -u builder -- mkdir -p "$dest"
+          runuser -u builder -- tar -xJf "/tmp/${NERD_FONT_ARCHIVE}" -C "$dest"
+          fc-cache -f /home/builder/.local/share/fonts
+
+      - name: Capture every scene on headless Sway
+        run: |
+          # dbus-run-session gives sway and the tools a session bus.
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
+            dbus-run-session -- bash -c "cd '$GITHUB_WORKSPACE' && OUT='$GITHUB_WORKSPACE/scene-raw' bash scripts/shots/capture.sh"
+
+      - name: Crop the captures into WebP images
+        run: |
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" GITHUB_STEP_SUMMARY="${GITHUB_STEP_SUMMARY:-}" \
+            python3 scripts/shots/crop.py scene-raw scene-shots
+
+      - name: Upload the images
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: scene-shots
+          path: scene-shots/
+          if-no-files-found: error
+
+      - name: Upload the raw captures and logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: scene-raw
+          path: scene-raw/
+          if-no-files-found: warn

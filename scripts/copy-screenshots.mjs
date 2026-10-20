@@ -1,39 +1,45 @@
-// Copies the smoke-test screenshots (smoke-out/<tool>-<variant>.png) into site/public/screenshots.
-// Fails if any smoke variant has no screenshot, so the Pages build cannot ship a site with missing images.
-//   node scripts/copy-screenshots.mjs [smoke-out-dir]
-import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+// Copies the scene images (scene-shots/*.webp, from scripts/shots/crop.py) into site/public/screenshots.
+// Every image the catalog references (each base's image and each tool variant's screenshot) must exist and be
+// non-empty, or the Pages build fails. Run build-catalog first.
+//   node scripts/copy-screenshots.mjs [scene-shots-dir]
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { join, basename, resolve } from "node:path";
 import { ROOT } from "./lib/load.mjs";
 
-const src = resolve(process.argv[2] ?? join(ROOT, "smoke-out"));
+const src = resolve(process.argv[2] ?? join(ROOT, "scene-shots"));
 const dest = join(ROOT, "site", "public", "screenshots");
+const catalog = JSON.parse(readFileSync(join(ROOT, "site", "public", "catalog.json"), "utf8"));
 
-const listing = execFileSync(process.execPath, [join(ROOT, "scripts", "smoke-stage.mjs"), "list"], {
-  encoding: "utf8",
-});
-const variants = listing.split("\n").filter(Boolean);
-if (variants.length === 0) {
-  console.error("copy-screenshots: no smoke variants found (run build-catalog first)");
+const referenced = [];
+for (const base of catalog.bases ?? []) referenced.push({ what: `base ${base.id}`, path: base.image });
+for (const tool of catalog.tools) {
+  for (const variant of tool.variants) {
+    referenced.push({ what: `${tool.id} ${variant.id}`, path: variant.screenshot });
+  }
+}
+if (referenced.length === 0) {
+  console.error("copy-screenshots: the catalog references no images (run build-catalog first)");
   process.exit(1);
 }
 
-const missing = [];
+const problems = [];
 mkdirSync(dest, { recursive: true });
-for (const line of variants) {
-  const [tool, variant] = line.split(" ");
-  const name = `${tool}-${variant}.png`;
-  const file = join(src, name);
+for (const { what, path } of referenced) {
+  const file = join(src, basename(path));
   if (!existsSync(file)) {
-    missing.push(name);
+    problems.push(`${what}: ${basename(path)} is missing in ${src}`);
     continue;
   }
-  copyFileSync(file, join(dest, name));
+  if (statSync(file).size === 0) {
+    problems.push(`${what}: ${basename(path)} is empty`);
+    continue;
+  }
+  copyFileSync(file, join(dest, basename(path)));
 }
 
-if (missing.length) {
-  console.error(`copy-screenshots: ${missing.length} screenshot(s) missing in ${src}:`);
-  for (const m of missing) console.error(`  ${m}`);
+if (problems.length) {
+  console.error(`copy-screenshots: ${problems.length} image problem(s):`);
+  for (const p of problems) console.error(`  ${p}`);
   process.exit(1);
 }
-console.log(`copy-screenshots: ${variants.length} screenshot(s) copied to site/public/screenshots`);
+console.log(`copy-screenshots: ${referenced.length} image(s) copied to site/public/screenshots`);
