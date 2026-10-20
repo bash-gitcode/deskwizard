@@ -3,6 +3,9 @@ name: Pages
 on:
   push:
     branches: [main]
+  # Pull requests run the same build (so a missing scene image or a broken build fails before merge), but the
+  # deploy job below is main-only.
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -11,7 +14,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  # Pull requests get their own group, so a PR run never cancels a main deploy.
+  group: ${{ github.event_name == 'pull_request' && format('pages-pr-{0}', github.event.number) || 'pages' }}
   cancel-in-progress: true
 
 jobs:
@@ -77,6 +81,8 @@ jobs:
 
   deploy:
     needs: build
+    # Main only: pull requests build the site but never publish it.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
