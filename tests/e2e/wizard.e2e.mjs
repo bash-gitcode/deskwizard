@@ -68,6 +68,26 @@ async function main() {
 
   // 1. Distro
   await page.goto(base);
+  // 0. Base cards: each shows its full scene (lazy-loaded, so scroll each one in), and the viewer moves between bases.
+  const baseImgs = page.locator(".card .shot img");
+  const baseCount = await baseImgs.count();
+  check(baseCount >= 2, `Pick a base shows scene images (found ${baseCount})`);
+  for (let i = 0; i < baseCount; i++) {
+    const ok = await baseImgs.nth(i).evaluate(async (img) => {
+      img.scrollIntoView();
+      if (!img.complete) await new Promise((r) => { img.onload = r; img.onerror = r; });
+      return img.naturalWidth > 0;
+    });
+    check(ok, `base scene ${i + 1} loaded`);
+  }
+  check((await page.locator(".card .shot img").evaluateAll((list) => list.every((img) => img.alt.trim().length > 0))), "every base scene has alt text");
+  await page.locator(".card .shot").first().click();
+  await page.locator("dialog.viewer").waitFor({ state: "visible" });
+  check((await page.locator(".viewer-count").textContent()) === `1 of ${baseCount}`, "base viewer opens at the first base");
+  await page.keyboard.press("ArrowRight");
+  check((await page.locator(".viewer-count").textContent()) === `2 of ${baseCount}`, "ArrowRight moves to the next base");
+  await page.keyboard.press("Escape");
+  check(!(await page.locator("dialog.viewer").evaluate((d) => d.open)), "Escape closes the base viewer");
   // The first step is Start: Quick install, Pick a base, or Build your own. This flow builds its own choices.
   await page.getByRole("heading", { name: "Quick install" }).waitFor();
   await page.getByRole("button", { name: "Start a blank build" }).click();
@@ -123,6 +143,24 @@ async function main() {
     });
     check(ok, `variant screenshot ${i + 1} loaded`);
   }
+  // Viewer on a tool's looks: every image has alt text, the viewer moves with the arrow keys and closes with Esc.
+  check((await imgs.evaluateAll((list) => list.every((img) => img.alt.trim().length > 0))), "every variant image has alt text");
+  await variantCards.first().locator("button.shot").click();
+  const dialog = page.locator("dialog.viewer");
+  check(await dialog.evaluate((d) => d.open), "clicking a look opens the viewer");
+  check((await page.locator(".viewer-count").textContent()) === `1 of ${variantCount}`, "viewer opens at the first look");
+  await page.keyboard.press("ArrowRight");
+  check((await page.locator(".viewer-count").textContent()) === `2 of ${variantCount}`, "ArrowRight moves to the next look");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  check((await page.locator(".viewer-count").textContent()) === `${variantCount} of ${variantCount}`, "ArrowLeft wraps to the last look");
+  const viewed = await dialog.locator("img").evaluate(async (img) => {
+    if (!img.complete) await new Promise((r) => { img.onload = r; img.onerror = r; });
+    return { loaded: img.naturalWidth > 0, alt: img.alt.trim().length > 0 };
+  });
+  check(viewed.loaded && viewed.alt, "viewer image loaded and has alt text");
+  await page.keyboard.press("Escape");
+  check(!(await dialog.evaluate((d) => d.open)), "Escape closes the viewer");
   await variantCards.first().getByRole("button", { name: "Use this" }).click();
   check(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible(), "'Also needs: Nerd Font' appears with Font Awesome only");
   check(await page.locator(".badge[class*='needed-']").first().isVisible(), "needed badge is visible");
