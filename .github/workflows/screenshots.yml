@@ -63,7 +63,7 @@ jobs:
 
       - name: Check the scene contents and build the contact sheet
         run: |
-          mkdir -p scene-contact
+          runuser -u builder -- mkdir -p scene-contact
           runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
             python3 scripts/shots/check-scenes.py scene-raw scene-shots scene-contact/contact-sheet.png
 
