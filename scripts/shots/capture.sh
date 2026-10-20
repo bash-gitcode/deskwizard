@@ -55,16 +55,23 @@ start_sway() {
   export XDG_RUNTIME_DIR="$(mktemp -d)"
   chmod 700 "$XDG_RUNTIME_DIR"
   printf 'output * mode 1920x1080\n' > "$raw/sway-config"
-  WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman LIBSEAT_BACKEND=noop \
+  # A stale SWAYSOCK from an earlier scene pointed swaymsg at a socket that never answered. Clear it, let Sway
+  # create its own IPC socket, then use the socket that exists (the same way the smoke test starts Sway).
+  unset SWAYSOCK
+  env -u SWAYSOCK WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman LIBSEAT_BACKEND=noop \
     sway -V -c "$raw/sway-config" > "$raw/sway.log" 2>&1 &
   SWAY_PID=$!
-  export SWAYSOCK="$XDG_RUNTIME_DIR/sway-ipc.$(id -u).$SWAY_PID.sock"
+  local ipc=""
   for _ in $(seq 1 30); do
-    if swaymsg -t get_outputs >/dev/null 2>&1; then break; fi
+    for s in "$XDG_RUNTIME_DIR"/sway-ipc.*.sock; do
+      [ -S "$s" ] && ipc="$s"
+    done
+    if [ -n "$ipc" ] && SWAYSOCK="$ipc" swaymsg -t get_outputs >/dev/null 2>&1; then break; fi
     kill -0 "$SWAY_PID" 2>/dev/null || return 1
     sleep 1
   done
-  swaymsg -t get_outputs >/dev/null 2>&1 || return 1
+  [ -n "$ipc" ] && SWAYSOCK="$ipc" swaymsg -t get_outputs >/dev/null 2>&1 || return 1
+  export SWAYSOCK="$ipc"
   local sock=""
   for s in "$XDG_RUNTIME_DIR"/wayland-*; do
     case "$s" in *.lock) ;; *) sock="$s" ;; esac
