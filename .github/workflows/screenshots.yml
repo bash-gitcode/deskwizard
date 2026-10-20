@@ -61,6 +61,12 @@ jobs:
       - name: No two scene images are byte-identical unless scripts/shots/duplicates.json allows it
         run: python3 scripts/shots/check-duplicates.py scene-shots
 
+      - name: Check the scene contents and build the contact sheet
+        run: |
+          mkdir -p scene-contact
+          runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
+            python3 scripts/shots/check-scenes.py scene-raw scene-shots scene-contact/contact-sheet.png
+
       - name: Write the image sizes to the job summary
         if: always()
         run: |
@@ -72,6 +78,14 @@ jobs:
           name: scene-shots
           path: scene-shots/
           if-no-files-found: error
+
+      - name: Upload the contact sheet (every image with its file name)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: scene-contact-sheet
+          path: scene-contact/
+          if-no-files-found: warn
 
       - name: Upload the raw captures and logs
         if: always()

@@ -103,6 +103,8 @@ run_scene() { # run_scene LABEL BASE [TOOL VARIANT]
   # Each scene starts from a clean set of config folders, so a previous variant's files cannot leak in.
   rm -rf "$HOME/.config/waybar" "$HOME/.config/foot" "$HOME/.config/fuzzel" "$HOME/.config/mako" "$HOME/.local/share/backgrounds/deskwizard"
   cp -r "$stage"/. "$HOME"/
+  # The waybar config this scene ran with, so check-scenes.py can compare the bar height to it.
+  cp "$HOME/.config/waybar/config.jsonc" "$raw/waybar-config.jsonc" || FAILS+=("$label: no waybar config staged")
 
   if ! start_sway "$raw"; then
     FAILS+=("$label: sway did not start (see $raw/sway.log)")
