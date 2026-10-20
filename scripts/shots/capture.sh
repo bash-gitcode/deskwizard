@@ -115,7 +115,14 @@ run_scene() { # run_scene LABEL BASE [TOOL VARIANT]
     return
   fi
 
-  swaybg -i "$HOME/.local/share/backgrounds/deskwizard/wallpaper.png" -m fill > "$raw/swaybg.log" 2>&1 &
+  local wallpaper="$HOME/.local/share/backgrounds/deskwizard/wallpaper.png"
+  swaybg -i "$wallpaper" -m fill > "$raw/swaybg.log" 2>&1 &
+  sleep 2
+  # Capture the wallpaper alone, before the foot windows open: they cover the whole workspace, so a later frame
+  # shows the terminal background instead of the wallpaper.
+  pgrep -a swaybg > "$raw/swaybg-process.txt" 2>/dev/null || true
+  sha256sum "$wallpaper" > "$raw/wallpaper-source.sha256"
+  grim "$raw/wallpaper.png" || FAILS+=("$label: grim failed on wallpaper.png")
   waybar -c "$HOME/.config/waybar/config.jsonc" -s "$HOME/.config/waybar/style.css" > "$raw/waybar.log" 2>&1 &
   mako > "$raw/mako.log" 2>&1 &
   foot sh "$DEMO" > /dev/null 2>&1 &

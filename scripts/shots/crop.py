@@ -141,7 +141,12 @@ for raw in labels:
     name = f"{tool}-{variant}.webp"
     box = None
     if tool == "swaybg":
-        save(desktop, name, label)
+        # The wallpaper alone, captured before the foot windows opened (see capture.sh).
+        wallpaper_path = os.path.join(raw, "wallpaper.png")
+        if not os.path.exists(wallpaper_path):
+            problems.append(f"{label}: swaybg: no wallpaper.png capture")
+            continue
+        save(Image.open(wallpaper_path).convert("RGB"), name, label)
         continue
     if tool == "foot":
         box = crop_foot(label, raw, desktop, load_json(os.path.join(raw, "tree.json")))

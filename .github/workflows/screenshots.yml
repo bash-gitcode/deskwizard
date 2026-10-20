@@ -55,6 +55,9 @@ jobs:
           runuser -u builder -- env HOME=/home/builder PATH="$PATH" \
             python3 scripts/shots/crop.py scene-raw scene-shots
 
+      - name: Each swaybg capture is its own wallpaper (fails if the terminal shows instead)
+        run: python3 scripts/shots/check-wallpapers.py scene-raw
+
       - name: Write the image sizes to the job summary
         if: always()
         run: |
