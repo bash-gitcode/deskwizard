@@ -38,9 +38,18 @@ def mad(a, b):
     return sum(abs(x - y) for x, y in zip(a, b)) / len(a)
 
 
+def variant_id(variant_dir):
+    # The variant id (e.g. "dusk") is the id: line of meta.yaml; the directory name (e.g. "01") is not used.
+    with open(os.path.join(variant_dir, "meta.yaml")) as f:
+        for line in f:
+            if line.startswith("id:"):
+                return line.split(":", 1)[1].strip().strip("'\"")
+    raise SystemExit(f"check-wallpapers: no id in {variant_dir}/meta.yaml")
+
+
 sources = {}
 for path in sorted(glob.glob(os.path.join(sources_dir, "*", "wallpaper.png"))):
-    sources[os.path.basename(os.path.dirname(path))] = small(path)
+    sources[variant_id(os.path.dirname(path))] = small(path)
 if len(sources) < 2:
     print(f"check-wallpapers: need at least two source wallpapers under {sources_dir}", file=sys.stderr)
     sys.exit(1)
