@@ -19,6 +19,7 @@ import {
 
 const HASH_KEY = "build=";
 const NEEDED_LABEL = { required: "Required", recommended: "Recommended", optional: "Optional" };
+const SCREENSHOT_NOTE = "Screenshots use the default palette and sample values for hardware that CI does not have.";
 // Folder of the installer the Review page links to: the latest stable release tag (written by the Pages build),
 // or v1 (latest compatible) when no release exists yet.
 const latestDir = fetch("latest.json")
@@ -41,6 +42,70 @@ function el(tag, props = {}, ...children) {
     node.append(child instanceof Node ? child : document.createTextNode(String(child)));
   }
   return node;
+}
+
+// ---- scene viewer -----------------------------------------------------------
+// One scene image at a time in a native <dialog> (Esc closes it). The arrow keys and the buttons move through the
+// list the image was opened from: a tool's looks, or all the bases.
+let viewer = null;
+let viewerItems = [];
+let viewerIndex = 0;
+
+function showScene() {
+  const item = viewerItems[viewerIndex];
+  viewer.querySelector("img").src = item.src;
+  viewer.querySelector("img").alt = item.alt;
+  viewer.querySelector("figcaption").textContent = item.caption;
+  viewer.querySelector(".viewer-count").textContent = `${viewerIndex + 1} of ${viewerItems.length}`;
+}
+
+function moveScene(delta) {
+  viewerIndex = (viewerIndex + delta + viewerItems.length) % viewerItems.length;
+  showScene();
+}
+
+function openViewer(items, index) {
+  if (!viewer) {
+    viewer = el(
+      "dialog",
+      { class: "viewer", "aria-label": "Scene viewer" },
+      el("figure", {}, el("img", { alt: "" }), el("figcaption", {})),
+      el(
+        "div",
+        { class: "viewer-controls" },
+        el("button", { type: "button", onclick: () => moveScene(-1) }, "Previous"),
+        el("span", { class: "viewer-count", "aria-live": "polite" }),
+        el("button", { type: "button", onclick: () => moveScene(1) }, "Next"),
+        el("button", { type: "button", onclick: () => viewer.close() }, "Close")
+      )
+    );
+    viewer.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        moveScene(-1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        moveScene(1);
+      }
+    });
+    // A click outside the dialog's content (on the backdrop) closes it.
+    viewer.addEventListener("click", (e) => {
+      if (e.target === viewer) viewer.close();
+    });
+    document.body.append(viewer);
+  }
+  viewerItems = items;
+  viewerIndex = index;
+  showScene();
+  viewer.showModal();
+}
+
+function baseScene(base) {
+  return { src: base.image, alt: base.image_alt, caption: base.name };
+}
+
+function variantScene(tool, variant) {
+  return { src: variant.screenshot, alt: variant.screenshot_alt, caption: `${tool.name}: ${variant.name}` };
 }
 
 // ---- payload helpers --------------------------------------------------------
@@ -183,15 +248,24 @@ export function startWizard(root, catalog) {
         )
       ),
       el("h3", {}, "Pick a base"),
+      el("p", { class: "meta" }, SCREENSHOT_NOTE),
       el(
         "div",
         { class: "cards" },
-        bases.map((base) =>
+        bases.map((base, i) =>
           el(
             "div",
             { class: "card" },
-            // Placeholder until the base has a picture.
-            el("div", { class: "placeholder", "aria-hidden": "true" }, base.name),
+            el(
+              "button",
+              {
+                type: "button",
+                class: "shot",
+                "aria-label": `Enlarge the ${base.name} scene`,
+                onclick: () => openViewer(bases.map(baseScene), i),
+              },
+              el("img", { src: base.image, alt: base.image_alt, width: 1920, height: 1080, loading: "lazy" })
+            ),
             el("h3", {}, base.name),
             el("p", {}, base.description),
             el("button", { type: "button", onclick: () => { app.state = stateFromBase(base); app.notices = []; go(1); } }, `Use ${base.name}`)
@@ -452,18 +526,21 @@ export function startWizard(root, catalog) {
       );
     }
 
-    const variantCards = tool.variants.map((v) => {
+    const variantCards = tool.variants.map((v, i) => {
       const selected = choice?.variant === v.id;
       return el(
         "article",
         { class: `card variant${selected ? " selected" : ""}` },
-        el("img", {
-          src: v.screenshot,
-          alt: `Placeholder screenshot of the ${v.name} look`,
-          width: 480,
-          height: 240,
-          loading: "lazy",
-        }),
+        el(
+          "button",
+          {
+            type: "button",
+            class: "shot",
+            "aria-label": `Enlarge the ${v.name} look`,
+            onclick: () => openViewer(tool.variants.map((x) => variantScene(tool, x)), i),
+          },
+          el("img", { src: v.screenshot, alt: v.screenshot_alt, width: 480, height: 240, loading: "lazy" })
+        ),
         el("h3", { text: v.name }),
         el("p", { class: "meta" }, "Good for: ", v.good_for.join(", ")),
         swatchStrip(currentPalette()),
@@ -491,6 +568,7 @@ export function startWizard(root, catalog) {
             "section",
             { class: "variants" },
             el("h3", {}, "Pick a look"),
+            el("p", { class: "meta" }, SCREENSHOT_NOTE),
             el("div", { class: "cards" }, variantCards),
             el(
               "div",
