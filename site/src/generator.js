@@ -15,6 +15,7 @@
 //   distro=debian13  display=wayland  font=jetbrains-mono  palette=midnight  start=manual
 //   extra=<id>        (one line per accepted extra)
 //   tool.<id>=<variant or ->   (one line per chosen tool)
+//   opt.<tool>.<key>=<value>   (schema 5: one line per option the user changed; missing ones take the default)
 // Lines are sorted, so the same choices always give the same code.
 //
 // Payload (Save/Load YAML): the same choices as a YAML object. Only these fields, no timestamps or host info:
@@ -24,7 +25,12 @@
 // Schemas 2 and 3 (no start_method, so \"manual\") and schema 1 (`deskwizard: 1`) are still accepted.
 
 const SAFE_PKG = /^[a-z0-9][a-z0-9.+-]*$/;
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
+// Build codes that still load. Schema 4 has no option lines, so its options are the defaults.
+export const ACCEPTED_CODE_SCHEMAS = [4, 5];
+// {{OPT:tool.key}} in a tool file is replaced by the option's value (see renderOptions).
+const PAL_TOKEN_RE = /\{\{PAL:([a-z0-9_]+)\}\}/g;
+const OPTION_TOKEN_RE = /\{\{OPT:([a-z][a-z0-9-]*\.[a-z][a-z0-9_]*)\}\}/g;
 export const DEFAULT_PALETTE = "midnight";
 export const DEFAULT_START = "manual";
 export const NERD_FONT_TOKEN = "{{NERD_FONT}}";
@@ -97,7 +103,96 @@ export function resolveTokens(text, palette) {
   return { text: out, unknown };
 }
 
-// Returns { errors, chosen, distro, font, palette, start, extras }.
+// ---- tool options (schema 5) ---------------------------------------------------
+// An option is declared in a tool's tool.yaml: { key, label, type, default, min?, max?, scale?, pattern?, true_text?, false_text? }.
+// Types: number (whole number from min to max, multiplied by scale when written), bool (true_text or
+// false_text is written), string-id (must match the regex in pattern). The wizard stores only the values the
+// user changed; anything missing takes the default.
+
+// Checks one raw value against an option definition. Returns { value } or { error }.
+// Build codes give strings; the wizard and YAML give numbers and booleans.
+export function checkOption(def, raw) {
+  if (def.type === "bool") {
+    if (raw === true || raw === "true") return { value: true };
+    if (raw === false || raw === "false") return { value: false };
+    return { error: "must be on or off" };
+  }
+  if (def.type === "number") {
+    const n = typeof raw === "number" ? raw : /^[0-9]{1,6}$/.test(String(raw)) ? Number(raw) : NaN;
+    if (!Number.isInteger(n)) return { error: "must be a whole number" };
+    if (n < def.min || n > def.max) return { error: `must be from ${def.min} to ${def.max}` };
+    return { value: n };
+  }
+  if (def.type === "string-id") {
+    if (typeof raw !== "string" || !new RegExp(def.pattern).test(raw)) return { error: "has a value that is not allowed" };
+    return { value: raw };
+  }
+  return { error: "has an unknown type" };
+}
+
+// Returns the value of every option of the chosen tools, with defaults filled in: { [tool]: { [key]: value } }.
+// Problems go into `errors`, including options set for a tool that is not in the build.
+export function resolveOptions(given, chosen, errors) {
+  const resolved = {};
+  const chosenIds = new Set(chosen.map((t) => t.id));
+  for (const toolId of Object.keys(given ?? {})) {
+    if (!chosenIds.has(toolId)) errors.push(`Options were set for '${toolId}', which is not in the build.`);
+  }
+  for (const tool of chosen) {
+    const defs = tool.options ?? [];
+    const vals = given?.[tool.id] ?? {};
+    resolved[tool.id] = {};
+    for (const key of Object.keys(vals)) {
+      if (!defs.some((d) => d.key === key)) errors.push(`Unknown option '${key}' for ${tool.name}.`);
+    }
+    for (const def of defs) {
+      const raw = vals[def.key];
+      if (raw === undefined) {
+        resolved[tool.id][def.key] = def.default;
+        continue;
+      }
+      const res = checkOption(def, raw);
+      if (res.error) errors.push(`${tool.name} option '${def.key}' ${res.error}.`);
+      else resolved[tool.id][def.key] = res.value;
+    }
+  }
+  return resolved;
+}
+
+// The text an option writes into a config file.
+export function optionText(def, value) {
+  if (def.type === "number") return String(value * (def.scale ?? 1));
+  if (def.type === "bool") return value ? def.true_text : def.false_text;
+  return String(value);
+}
+
+// Replaces {{PAL:name}} in tool files with a color from the chosen palette (e.g. {{PAL:accent}}).
+// Only the color tokens are allowed; anything else goes into `errors`.
+function renderPalette(text, palette, errors) {
+  return text.replace(PAL_TOKEN_RE, (match, name) => {
+    const value = PALETTE_COLOR_TOKENS.includes(name) ? palette.tokens[name] : undefined;
+    if (!value) {
+      errors.push(`unknown palette color ${match}.`);
+      return match;
+    }
+    return value;
+  });
+}
+
+// Replaces {{OPT:tool.key}} tokens with option text. Unknown tokens go into `errors`.
+function renderOptions(text, chosen, options, errors) {
+  return text.replace(OPTION_TOKEN_RE, (match, ref) => {
+    const [toolId, key] = ref.split(".");
+    const def = chosen.find((t) => t.id === toolId)?.options?.find((d) => d.key === key);
+    if (!def) {
+      errors.push(`unknown option token ${match}.`);
+      return match;
+    }
+    return optionText(def, options[toolId][key]);
+  });
+}
+
+// Returns { errors, chosen, distro, font, palette, start, extras, options }.
 // `chosen` is the list of catalog tools in display order. `extras` is in catalog order.
 export function validateState(state, catalog) {
   const errors = [];
@@ -136,8 +231,15 @@ export function validateState(state, catalog) {
   }
   const wanted = new Set(accepted);
   for (const tool of chosen) for (const id of tool.extras ?? []) wanted.add(id);
+  const options = resolveOptions(state?.options, chosen, errors);
+  // An extra with `option` (e.g. "sway.media_keys") is in the build only while that bool option is on.
+  const optionOn = (e) => {
+    if (!e.option) return true;
+    const [toolId, key] = e.option.split(".");
+    return options[toolId]?.[key] === true;
+  };
   // Catalog order, so the installer can produce the same order from the manifest.
-  const extras = (catalog.extras ?? []).map((e) => e.id).filter((id) => wanted.has(id));
+  const extras = (catalog.extras ?? []).filter((e) => wanted.has(e.id) && optionOn(e)).map((e) => e.id);
 
   const compositors = chosen.filter((t) => t.type === "compositor");
   if (compositors.length !== 1) errors.push("Choose exactly one compositor (Sway).");
@@ -158,7 +260,7 @@ export function validateState(state, catalog) {
       }
     }
   }
-  return { errors, chosen, distro, font, palette, start, extras };
+  return { errors, chosen, distro, font, palette, start, extras, options };
 }
 
 // Renders the key for the cheat sheet and for sway: "$mod+Return" -> "Super+Return".
@@ -170,7 +272,7 @@ function prettyKey(key) {
 // The installer (site/src/installer.sh) mirrors this logic in bash from manifest.json. Keep both in step:
 // tests/installer.test.sh compares the installer's files with plan.files byte for byte.
 export function buildPlan(state, catalog) {
-  const { errors, chosen, distro, font, palette, start, extras } = validateState(state, catalog);
+  const { errors, chosen, distro, font, palette, start, extras, options } = validateState(state, catalog);
   const packages = [];
   const files = [];
   const binds = [];
@@ -269,6 +371,8 @@ export function buildPlan(state, catalog) {
             out = res.text;
           }
           out = out.replaceAll(`"${NERD_FONT_TOKEN}", `, family);
+          out = renderOptions(out, chosen, options, errors);
+          out = renderPalette(out, palette, errors);
           for (const [key, value] of Object.entries(subs)) out = out.replaceAll(key, value);
         }
         files.push({
@@ -321,7 +425,7 @@ export function fromBase64(b64) {
 }
 
 // ---- build code (key=value, base64url) -------------------------------------
-const CODE_LINE_RE = /^(schema|catalog|distro|display|font|palette|start|extra|tool\.[a-z][a-z0-9-]*)=([a-z0-9._-]{1,64})$/;
+const CODE_LINE_RE = /^(schema|catalog|distro|display|font|palette|start|extra|tool\.[a-z][a-z0-9-]*|opt\.[a-z][a-z0-9-]*\.[a-z][a-z0-9_]*)=([a-z0-9._,-]{1,64})$/;
 const CODE_REQUIRED = ["schema", "catalog", "distro", "display", "font", "palette", "start"];
 
 function encodeCode(text) {
@@ -342,6 +446,9 @@ export function buildCode(state, catalogVersion) {
   ];
   for (const id of [...c.extras].sort()) lines.push(`extra=${id}`);
   for (const id of Object.keys(c.tools).sort()) lines.push(`tool.${id}=${c.tools[id].variant ?? "-"}`);
+  for (const toolId of Object.keys(c.options).sort()) {
+    for (const key of Object.keys(c.options[toolId]).sort()) lines.push(`opt.${toolId}.${key}=${c.options[toolId][key]}`);
+  }
   for (const line of lines) {
     if (!CODE_LINE_RE.test(line)) throw new Error(`Cannot write '${line}' into a build code.`);
   }
@@ -368,17 +475,26 @@ export function parseCode(code) {
   const values = new Map();
   const extras = [];
   const tools = {};
+  const options = {};
   for (const line of lines) {
     const m = CODE_LINE_RE.exec(line);
-    if (!m) throw new Error("The build code has a malformed line.");
+    if (!m) {
+      if (line.startsWith("opt.")) throw new Error("The build code has an option line with a value that is not allowed.");
+      throw new Error("The build code has a malformed line.");
+    }
     const [, key, value] = m;
     if (key === "extra") {
       if (extras.includes(value)) throw new Error(`The build code lists extra '${value}' twice.`);
       extras.push(value);
     } else if (key.startsWith("tool.")) {
       const id = key.slice(5);
-      if (id in tools) throw new Error(`The build code lists tool '${id}' twice.`);
+      if (Object.hasOwn(tools, id)) throw new Error(`The build code lists tool '${id}' twice.`);
       tools[id] = { variant: value === "-" ? null : value };
+    } else if (key.startsWith("opt.")) {
+      const [toolId, optKey] = key.slice(4).split(".");
+      options[toolId] ??= {};
+      if (Object.hasOwn(options[toolId], optKey)) throw new Error(`The build code repeats option '${optKey}'.`);
+      options[toolId][optKey] = value;
     } else {
       if (values.has(key)) throw new Error(`The build code repeats '${key}'.`);
       values.set(key, value);
@@ -387,11 +503,13 @@ export function parseCode(code) {
   for (const key of CODE_REQUIRED) {
     if (!values.has(key)) throw new Error(`The build code is missing '${key}'.`);
   }
-  if (values.get("schema") !== String(SCHEMA_VERSION)) {
+  const schema = Number(values.get("schema"));
+  if (!ACCEPTED_CODE_SCHEMAS.includes(schema)) {
     throw new Error(`Unsupported build code schema ${values.get("schema")}.`);
   }
+  if (schema === 4 && Object.keys(options).length > 0) throw new Error("The build code is malformed (schema 4 has no options).");
   return {
-    schema_version: SCHEMA_VERSION,
+    schema_version: schema,
     catalog_version: values.get("catalog"),
     choices: {
       distro: values.get("distro"),
@@ -401,6 +519,7 @@ export function parseCode(code) {
       start_method: values.get("start"),
       extras,
       tools,
+      options,
     },
   };
 }
@@ -409,7 +528,7 @@ export function parseCode(code) {
 export function toPayload(state, catalogVersion) {
   const tools = {};
   for (const [id, choice] of Object.entries(state.choices ?? {})) tools[id] = { variant: choice?.variant ?? null };
-  return {
+  const payload = {
     schema_version: SCHEMA_VERSION,
     catalog_version: catalogVersion,
     choices: {
@@ -420,20 +539,50 @@ export function toPayload(state, catalogVersion) {
       start_method: state.start ?? DEFAULT_START,
       extras: [...(state.extras ?? [])],
       tools,
+      options: cloneOptions(state.options),
     },
   };
+  // The base a build started from is a label only. The choices above are what gets installed.
+  if (state.base) payload.base = state.base;
+  return payload;
+}
+
+// Copies the user's option values: { [tool]: { [key]: value } }.
+function cloneOptions(options) {
+  const out = {};
+  for (const [toolId, values] of Object.entries(options ?? {})) out[toolId] = { ...values };
+  return out;
 }
 
 // Accepts schema 4, 3, 2 and the legacy schema 1. Returns { state, notices }.
 // `catalog` is optional; older payloads need it to find the extras their tools use.
 // Throws a plain-language Error for anything else.
+// Build codes give option values as text. Each value the catalog defines becomes its typed value (number or
+// boolean). Anything else stays as it was, so buildPlan reports it.
+function normalizeOptions(options, catalog) {
+  const out = {};
+  for (const [toolId, vals] of Object.entries(options)) {
+    out[toolId] = {};
+    const tool = catalog ? toolById(catalog, toolId) : null;
+    for (const [key, raw] of Object.entries(vals)) {
+      const def = tool?.options?.find((d) => d.key === key);
+      const res = def ? checkOption(def, raw) : {};
+      out[toolId][key] = res.error === undefined && def ? res.value : raw;
+    }
+  }
+  return out;
+}
+
 export function fromPayload(obj, currentCatalogVersion, catalog) {
   if (!obj || typeof obj !== "object") throw new Error("This is not a deskwizard build.");
   const notices = [];
 
-  if (obj.schema_version === SCHEMA_VERSION || obj.schema_version === 3 || obj.schema_version === 2) {
+  if ([2, 3, 4, 5].includes(obj.schema_version)) {
     const c = obj.choices ?? {};
     if (typeof c !== "object") throw new Error("The build's choices are missing.");
+    if (c.options !== undefined && (typeof c.options !== "object" || c.options === null || Array.isArray(c.options))) {
+      throw new Error("The build's options are malformed.");
+    }
     if (obj.catalog_version !== currentCatalogVersion) {
       notices.push(
         `This build was made with an older catalog (${obj.catalog_version ?? "unknown"}). ` +
@@ -451,7 +600,8 @@ export function fromPayload(obj, currentCatalogVersion, catalog) {
       notices.push("This build was saved before palettes existed. The default palette was applied.");
     }
     let start = c.start_method ?? null;
-    if (obj.schema_version !== SCHEMA_VERSION || start === null) {
+    // Schemas 2 and 3 had no start method.
+    if (obj.schema_version < 4 || start === null) {
       start = DEFAULT_START;
       notices.push("This build was saved before start methods existed. The start method was set to manual.");
     }
@@ -464,6 +614,9 @@ export function fromPayload(obj, currentCatalogVersion, catalog) {
         start,
         extras,
         choices: c.tools ?? {},
+        // Schema 2 to 4 builds have no options: every option takes its default.
+        options: normalizeOptions(c.options ?? {}, catalog),
+        ...(typeof obj.base === "string" ? { base: obj.base } : {}),
       },
       notices,
     };
@@ -489,4 +642,42 @@ export function fromPayload(obj, currentCatalogVersion, catalog) {
   }
 
   throw new Error(`Unknown build format (schema_version ${obj.schema_version ?? "missing"}). Nothing was loaded.`);
+}
+
+// A base is a complete starting build from catalog/bases/*.yaml, in the same shape as the wizard state.
+export function stateFromBase(base) {
+  const choices = {};
+  for (const [id, choice] of Object.entries(base.tools ?? {})) choices[id] = { variant: choice?.variant ?? null };
+  return {
+    distro: base.distro,
+    display: base.display,
+    font: base.font,
+    palette: base.palette ?? DEFAULT_PALETTE,
+    start: base.start ?? DEFAULT_START,
+    extras: [],
+    choices,
+    options: cloneOptions(base.options),
+    base: base.id,
+  };
+}
+
+// What the installer would do with a state: its tools, variants, extras and option values.
+function resolvedBuild(state, catalog) {
+  const { extras, options } = validateState(state, catalog);
+  const tools = Object.keys(state.choices ?? {}).sort().map((id) => [id, state.choices[id]?.variant ?? null]);
+  return {
+    distro: state.distro,
+    display: state.display,
+    font: state.font,
+    palette: state.palette ?? DEFAULT_PALETTE,
+    start: state.start ?? DEFAULT_START,
+    tools,
+    extras,
+    options,
+  };
+}
+
+// A build is customized once anything it installs differs from the base it started from.
+export function isCustomized(state, base, catalog) {
+  return JSON.stringify(resolvedBuild(state, catalog)) !== JSON.stringify(resolvedBuild(stateFromBase(base), catalog));
 }

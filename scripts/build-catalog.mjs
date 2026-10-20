@@ -3,9 +3,10 @@
 // Config and style files are inlined so the browser and the installer need no extra fetches.
 // Screenshots are copied to site/public/catalog/. Every referenced file must exist.
 // Run with: npm run build-catalog
-import { existsSync, mkdirSync, writeFileSync, copyFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT, CATALOG, loadCatalog, readYaml, readText, rel } from "./lib/load.mjs";
+import { validateState } from "../site/src/generator.js";
 
 const OUT_DIR = join(ROOT, "site", "public");
 const OUT_ASSETS = join(OUT_DIR, "catalog");
@@ -25,6 +26,15 @@ const palettes = readdirSync(join(CATALOG, "palettes"))
   .filter((n) => n.endsWith(".yaml"))
   .sort()
   .map((n) => readYaml(join(CATALOG, "palettes", n)));
+
+// Bases are complete starting builds (catalog/bases/*.yaml). QUICK_BASE is the Quick install choice and is listed first.
+const QUICK_BASE = "night-bar";
+const bases = readdirSync(join(CATALOG, "bases"))
+  .filter((n) => n.endsWith(".yaml"))
+  .sort()
+  .map((n) => readYaml(join(CATALOG, "bases", n)))
+  .sort((a, b) => (a.id === QUICK_BASE ? -1 : b.id === QUICK_BASE ? 1 : 0));
+if (!bases.some((b) => b.id === QUICK_BASE)) throw new Error(`build-catalog: no base with id '${QUICK_BASE}' for Quick install`);
 
 // Clean output so removed tools/variants do not linger in the site.
 rmSync(OUT_ASSETS, { recursive: true, force: true });
@@ -53,10 +63,8 @@ for (const tool of cat.tools) {
         vfiles[item.source] = item.binary ? readFileSync(src).toString("base64") : readText(src);
       }
     }
-    const shotSrc = requireFile(join(v.path, meta.screenshot), `screenshot of ${data.id}/${meta.id}`);
-    const shotRel = `catalog/${data.id}/${meta.id}/${meta.screenshot}`;
-    mkdirSync(join(OUT_DIR, "catalog", data.id, meta.id), { recursive: true });
-    copyFileSync(shotSrc, join(OUT_DIR, shotRel));
+    // Scene images are made by scripts/shots (crop.py) and copied to site/public/screenshots by copy-screenshots.mjs.
+    const shotRel = `screenshots/${data.id}-${meta.id}.webp`;
 
     variants.push({
       id: meta.id,
@@ -67,6 +75,7 @@ for (const tool of cat.tools) {
       requires: meta.requires,
       options: meta.options,
       screenshot: shotRel,
+      screenshot_alt: `${data.name} ${meta.name}: a crop of a sample Sway desktop showing this variant`,
       files: vfiles,
     });
   }
@@ -86,6 +95,7 @@ for (const tool of cat.tools) {
     command: data.command ?? null,
     autostart: data.autostart ?? [],
     binds: data.binds ?? [],
+    options: data.options ?? [],
     packages: data.packages,
     difficulty: data.difficulty,
     ram_mb: data.ram_mb,
@@ -113,8 +123,34 @@ const catalog = {
   extras,
   palettes,
   start_methods: startMethods,
+  bases: bases.map((b) => ({
+    ...b,
+    image: `screenshots/base-${b.id}.webp`,
+    image_alt: `${b.name} base: a full sample desktop with a bar, two terminals and notifications`,
+  })),
   tools: tools.sort((a, b) => a.display.order - b.display.order),
 };
+
+// Each base goes through the same validation as a build the user makes.
+const baseErrors = [];
+for (const base of bases) {
+  const state = {
+    distro: base.distro,
+    display: base.display,
+    font: base.font,
+    palette: base.palette,
+    start: base.start,
+    extras: [],
+    choices: base.tools,
+    options: base.options ?? {},
+  };
+  for (const e of validateState(state, catalog).errors) baseErrors.push(`${base.id}: ${e}`);
+}
+if (baseErrors.length) {
+  console.error("build-catalog: bases do not pass validation:\n");
+  for (const e of baseErrors) console.error("  " + e);
+  process.exit(1);
+}
 
 writeFileSync(join(OUT_DIR, "catalog.json"), JSON.stringify(catalog, null, 2) + "\n");
 const variantCount = tools.reduce((n, t) => n + t.variants.length, 0);

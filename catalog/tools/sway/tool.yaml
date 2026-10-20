@@ -17,23 +17,46 @@ requires: []
 extras:
   - portal
   - polkit
-# Recommended: the wizard offers them with an Add button. media-keys is optional (laptop-only), so it is not listed.
-recommends:
   - screenshot
+  - media-keys
+# Recommended: none. screenshot and media-keys are on by default; each is only in the build while its option is on.
+recommends: []
 packages:
   debian13:
     - sway
     - swaylock
+    - swayidle
+    - fuzzel
+    - grim
+    - slurp
 difficulty: medium
 ram_mb: 150
 default_variant: null
 command: null
 autostart: []
+# Settings written into sway.conf. Each one is shown in the "Sway settings" step with its default selected.
+# type: number (whole number, min to max; scale multiplies the value written, e.g. minutes to seconds),
+#       bool (true_text or false_text is written), string-id (must match pattern).
+options:
+  - { key: gaps_inner, label: "Gap between windows (px)", type: number, default: 8, min: 0, max: 50 }
+  - { key: gaps_outer, label: "Gap at the screen edge (px)", type: number, default: 0, min: 0, max: 50 }
+  - { key: smart_gaps, label: "Remove the gaps when only one window is open", type: bool, default: true, true_text: "on", false_text: "off" }
+  - { key: border_width, label: "Window border width (px)", type: number, default: 2, min: 0, max: 10 }
+  - { key: focus_follows_mouse, label: "Focus the window under the mouse", type: bool, default: false, true_text: "yes", false_text: "no" }
+  - { key: touchpad_tap, label: "Tap to click on the touchpad", type: bool, default: true, true_text: "enabled", false_text: "disabled" }
+  - { key: natural_scroll, label: "Natural scrolling on the touchpad", type: bool, default: false, true_text: "enabled", false_text: "disabled" }
+  - { key: keyboard_layout, label: "Keyboard layout (XKB code, e.g. us or us,de)", type: string-id, default: "us", pattern: "^[a-z]{2,3}(,[a-z]{2,3})*$" }
+  - { key: repeat_delay, label: "Key repeat delay (ms)", type: number, default: 300, min: 100, max: 1000 }
+  - { key: repeat_rate, label: "Key repeat rate (keys per second)", type: number, default: 30, min: 1, max: 100 }
+  - { key: lock_minutes, label: "Lock the screen after this many idle minutes", type: number, default: 10, min: 1, max: 120, scale: 60 }
+  - { key: screen_off_minutes, label: "Turn the screen off after this many idle minutes", type: number, default: 15, min: 1, max: 240, scale: 60 }
+  - { key: screenshot_keys, label: "Screenshot keys (Print: a region, Shift+Print: the whole screen)", type: bool, default: true, true_text: "on", false_text: "off" }
+  - { key: media_keys, label: "Volume, brightness and media keys", type: bool, default: true, true_text: "on", false_text: "off" }
 binds:
   - { key: "$mod+Return", command: "exec $term", label: "Open a terminal" }
   - { key: "$mod+Shift+q", command: "kill", label: "Close the focused window" }
   - { key: "$mod+Shift+c", command: "reload", label: "Reload the Sway config" }
-  - { key: "$mod+Escape", command: "exec swaylock -f -c 000000", label: "Lock the screen" }
+  - { key: "$mod+Escape", command: "exec $lock", label: "Lock the screen" }
   - { key: "$mod+Shift+e", command: "exec swaynag -t warning -m 'Exit Sway?' -B 'Yes, exit' 'swaymsg exit'", label: "Exit Sway" }
   - { key: "$mod+h", command: "focus left", label: "Move focus (h j k l, or the arrow keys)" }
   - { key: "$mod+j", command: "focus down", label: null }
@@ -52,16 +75,28 @@ binds:
   - { key: "$mod+s", command: "layout stacking", label: "Stacked layout" }
   - { key: "$mod+w", command: "layout tabbed", label: "Tabbed layout" }
   - { key: "$mod+e", command: "layout toggle split", label: "Split layout" }
-  - { key: "$mod+1", command: "workspace number 1", label: "Switch workspace (1 to 5)" }
+  - { key: "$mod+minus", command: "scratchpad show", label: "Show or hide the scratchpad window" }
+  - { key: "$mod+Shift+minus", command: "move scratchpad", label: "Send the window to the scratchpad" }
+  - { key: "$mod+1", command: "workspace number 1", label: "Switch workspace (1 to 0)" }
   - { key: "$mod+2", command: "workspace number 2", label: null }
   - { key: "$mod+3", command: "workspace number 3", label: null }
   - { key: "$mod+4", command: "workspace number 4", label: null }
   - { key: "$mod+5", command: "workspace number 5", label: null }
-  - { key: "$mod+Shift+1", command: "move container to workspace number 1", label: "Move the window to a workspace (Shift + 1 to 5)" }
+  - { key: "$mod+6", command: "workspace number 6", label: null }
+  - { key: "$mod+7", command: "workspace number 7", label: null }
+  - { key: "$mod+8", command: "workspace number 8", label: null }
+  - { key: "$mod+9", command: "workspace number 9", label: null }
+  - { key: "$mod+0", command: "workspace number 10", label: null }
+  - { key: "$mod+Shift+1", command: "move container to workspace number 1", label: "Move the window to a workspace (Shift + 1 to 0)" }
   - { key: "$mod+Shift+2", command: "move container to workspace number 2", label: null }
   - { key: "$mod+Shift+3", command: "move container to workspace number 3", label: null }
   - { key: "$mod+Shift+4", command: "move container to workspace number 4", label: null }
   - { key: "$mod+Shift+5", command: "move container to workspace number 5", label: null }
+  - { key: "$mod+Shift+6", command: "move container to workspace number 6", label: null }
+  - { key: "$mod+Shift+7", command: "move container to workspace number 7", label: null }
+  - { key: "$mod+Shift+8", command: "move container to workspace number 8", label: null }
+  - { key: "$mod+Shift+9", command: "move container to workspace number 9", label: null }
+  - { key: "$mod+Shift+0", command: "move container to workspace number 10", label: null }
 install:
   - target: "~/.config/sway/config"
     from: tool

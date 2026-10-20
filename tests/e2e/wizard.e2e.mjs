@@ -68,6 +68,29 @@ async function main() {
 
   // 1. Distro
   await page.goto(base);
+  // 0. Base cards: each shows its full scene (lazy-loaded, so scroll each one in), and the viewer moves between bases.
+  const baseImgs = page.locator(".card .shot img");
+  const baseCount = await baseImgs.count();
+  check(baseCount >= 2, `Pick a base shows scene images (found ${baseCount})`);
+  for (let i = 0; i < baseCount; i++) {
+    const ok = await baseImgs.nth(i).evaluate(async (img) => {
+      img.scrollIntoView();
+      if (!img.complete) await new Promise((r) => { img.onload = r; img.onerror = r; });
+      return img.naturalWidth > 0;
+    });
+    check(ok, `base scene ${i + 1} loaded`);
+  }
+  check((await page.locator(".card .shot img").evaluateAll((list) => list.every((img) => img.alt.trim().length > 0))), "every base scene has alt text");
+  await page.locator(".card .shot").first().click();
+  await page.locator("dialog.viewer").waitFor({ state: "visible" });
+  check((await page.locator(".viewer-count").textContent()) === `1 of ${baseCount}`, "base viewer opens at the first base");
+  await page.keyboard.press("ArrowRight");
+  check((await page.locator(".viewer-count").textContent()) === `2 of ${baseCount}`, "ArrowRight moves to the next base");
+  await page.keyboard.press("Escape");
+  check(!(await page.locator("dialog.viewer").evaluate((d) => d.open)), "Escape closes the base viewer");
+  // The first step is Start: Quick install, Pick a base, or Build your own. This flow builds its own choices.
+  await page.getByRole("heading", { name: "Quick install" }).waitFor();
+  await page.getByRole("button", { name: "Start a blank build" }).click();
   await page.getByRole("heading", { name: "Distro" }).waitFor();
   await page.getByRole("button", { name: "Use this" }).first().click();
   await shot(page, "distro");
@@ -80,15 +103,14 @@ async function main() {
 
   // 3. Compositor: Sway
   await page.getByRole("button", { name: "Use this" }).first().click();
-  // Sway tiers: portal and polkit are required (Included, no button); screenshots is recommended (Add); media keys is optional (no prompt).
+  // Sway tiers: portal, polkit, screenshots and media keys are all required extras (Included, no button).
+  // Screenshots and media keys are on by default; their Sway options turn them off.
   check(await page.getByText("Included: Desktop portal (needed because Sway)").isVisible(), "Sway shows the required portal as Included");
   check(await page.getByText("Included: Polkit agent (needed because Sway)").isVisible(), "Sway shows the required polkit agent as Included");
-  const recommended = page.getByRole("listitem").filter({ hasText: "Also recommended: Screenshots" });
-  check(await recommended.getByRole("button", { name: "Add" }).isVisible(), "Sway offers screenshots as Also recommended, with Add");
-  check((await page.getByText("Volume and brightness keys").count()) === 0, "optional media keys are not prompted");
+  check(await page.getByText("Included: Screenshots (grim and slurp) (needed because Sway)").isVisible(), "Sway shows screenshots as Included");
+  check(await page.getByText("Included: Volume and brightness keys (needed because Sway)").isVisible(), "Sway shows media keys as Included");
+  check((await page.getByText("Also recommended:").count()) === 0, "Sway offers no Also recommended extras");
   await shot(page, "compositor");
-  await recommended.getByRole("button", { name: "Add" }).click();
-  check(await page.getByText("Screenshots (grim and slurp) is in your build").isVisible(), "accepted screenshots shows 'is in your build'");
   await next();
 
   // 4. Palette: pick a different palette; the swatch strip shows its colors
@@ -121,10 +143,28 @@ async function main() {
     });
     check(ok, `variant screenshot ${i + 1} loaded`);
   }
+  // Viewer on a tool's looks: every image has alt text, the viewer moves with the arrow keys and closes with Esc.
+  check((await imgs.evaluateAll((list) => list.every((img) => img.alt.trim().length > 0))), "every variant image has alt text");
+  await variantCards.first().locator("button.shot").click();
+  const dialog = page.locator("dialog.viewer");
+  check(await dialog.evaluate((d) => d.open), "clicking a look opens the viewer");
+  check((await page.locator(".viewer-count").textContent()) === `1 of ${variantCount}`, "viewer opens at the first look");
+  await page.keyboard.press("ArrowRight");
+  check((await page.locator(".viewer-count").textContent()) === `2 of ${variantCount}`, "ArrowRight moves to the next look");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  check((await page.locator(".viewer-count").textContent()) === `${variantCount} of ${variantCount}`, "ArrowLeft wraps to the last look");
+  const viewed = await dialog.locator("img").evaluate(async (img) => {
+    if (!img.complete) await new Promise((r) => { img.onload = r; img.onerror = r; });
+    return { loaded: img.naturalWidth > 0, alt: img.alt.trim().length > 0 };
+  });
+  check(viewed.loaded && viewed.alt, "viewer image loaded and has alt text");
+  await page.keyboard.press("Escape");
+  check(!(await dialog.evaluate((d) => d.open)), "Escape closes the viewer");
   await variantCards.first().getByRole("button", { name: "Use this" }).click();
   check(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible(), "'Also needs: Nerd Font' appears with Font Awesome only");
   check(await page.locator(".badge[class*='needed-']").first().isVisible(), "needed badge is visible");
-  check((await page.locator("ol.stepper li").count()) === 12, "stepper lists 12 steps: distro, display, compositor, palette, font, 5 tools, start method, review");
+  check((await page.locator("ol.stepper li").count()) === 14, "stepper lists 14 steps: start, distro, display, compositor, palette, font, 5 tools, Sway settings, start method, review");
   await shot(page, "waybar-variant");
   await page.getByRole("listitem").filter({ hasText: "Also needs: Nerd Font" }).getByRole("button", { name: "Add" }).click();
   check(!(await page.getByText("Also needs: Nerd Font", { exact: false }).isVisible()), "Nerd Font prompt goes away after Add");
@@ -138,6 +178,9 @@ async function main() {
 
   // 6. Review
   await page.getByRole("heading", { name: "Review" }).waitFor();
+  // The keybind cheat sheet comes from the same bind data that writes sway.conf.
+  check(await page.getByRole("heading", { name: "Keybinds" }).isVisible(), "Review shows the Keybinds cheat sheet");
+  check(await page.getByText("Open a terminal", { exact: false }).first().isVisible(), "cheat sheet lists 'Open a terminal'");
   const line = page.getByRole("textbox", { name: "Install command" });
   // The command is filled in after latest.json is read, so wait for it.
   await page.waitForFunction(() => document.querySelector('textarea[aria-label="Install command"]')?.value.startsWith("curl "), null, { timeout: 10000 });
@@ -158,6 +201,8 @@ async function main() {
   await download.saveAs(saved);
   // Load is on the Review step, so start over and rebuild a different choice (Font Awesome only), then load.
   await page.getByRole("button", { name: "Start over" }).click();
+  await page.getByRole("heading", { name: "Quick install" }).waitFor();
+  await page.getByRole("button", { name: "Start a blank build" }).click();
   await page.getByRole("heading", { name: "Distro" }).waitFor();
   await page.getByRole("button", { name: "Use this" }).first().click();
   await next();
@@ -177,6 +222,57 @@ async function main() {
   const reloaded = await page.getByRole("textbox", { name: "Install command" }).inputValue();
   check(reloaded === oneLiner, "Save then Load restores the same build (same install command)");
   await shot(page, "loaded-build");
+
+  // Bases: Quick install fills every step and is not customized. Changing one option marks it customized.
+  // Save then Load round-trips the customized build. Load is on the Review step, so the load page starts there.
+  const basePage = await context.newPage();
+  await basePage.goto(base);
+  await basePage.getByRole("heading", { name: "Quick install" }).waitFor();
+  await basePage.getByRole("button", { name: "Use Quick install" }).click();
+  await basePage.getByRole("heading", { name: "Review" }).waitFor();
+  const baseLine = basePage.getByRole("textbox", { name: "Install command" });
+  await basePage.waitForFunction(() => document.querySelector('textarea[aria-label="Install command"]')?.value.startsWith("curl "), null, { timeout: 10000 });
+  const quickCommand = await baseLine.inputValue();
+  check(await basePage.getByText("Based on Night Bar.", { exact: true }).isVisible(), "Quick install says 'Based on Night Bar.'");
+  check((await basePage.getByText("(customized)", { exact: false }).count()) === 0, "an untouched base is not marked customized");
+  // Back to the Sway settings step and change one number.
+  for (let i = 0; i < 15 && !(await basePage.getByRole("heading", { name: "Sway settings" }).isVisible()); i++) {
+    await basePage.getByRole("button", { name: "Back", exact: true }).click();
+  }
+  await basePage.getByRole("heading", { name: "Sway settings" }).waitFor();
+  const field = basePage.getByRole("spinbutton").first();
+  const cur = Number(await field.inputValue());
+  const max = Number(await field.getAttribute("max"));
+  await field.fill(String(cur + 1 <= max ? cur + 1 : cur - 1));
+  await field.press("Tab");
+  for (let i = 0; i < 15 && !(await basePage.getByRole("heading", { name: "Review" }).isVisible()); i++) {
+    await basePage.getByRole("button", { name: "Next", exact: true }).click();
+  }
+  await basePage.getByRole("heading", { name: "Review" }).waitFor();
+  check(await basePage.getByText("(customized)", { exact: false }).isVisible(), "a changed option marks the build customized");
+  check(await basePage.getByText("Based on Night Bar (customized).", { exact: true }).isVisible(), "Review says 'Based on Night Bar (customized).'");
+  check(await basePage.getByRole("heading", { name: "Keybinds" }).isVisible(), "Review still lists the keybinds after a change");
+  await basePage.waitForFunction((old) => document.querySelector('textarea[aria-label="Install command"]')?.value !== old, quickCommand, { timeout: 10000 });
+  const customCommand = await baseLine.inputValue();
+  check(customCommand !== quickCommand, "the install command changes after the option change");
+  await shot(basePage, "base-customized");
+  const [baseDownload] = await Promise.all([basePage.waitForEvent("download"), basePage.getByRole("button", { name: "Save build (.yaml)" }).click()]);
+  const savedBase = join(SHOTS, "saved-base.yaml");
+  await baseDownload.saveAs(savedBase);
+  // Fresh page, Quick install, then Load: the saved customized build comes back, still marked customized.
+  const loadPage = await context.newPage();
+  await loadPage.goto(base);
+  await loadPage.getByRole("heading", { name: "Quick install" }).waitFor();
+  await loadPage.getByRole("button", { name: "Use Quick install" }).click();
+  await loadPage.getByRole("heading", { name: "Review" }).waitFor();
+  await loadPage.locator("#load-build").setInputFiles(savedBase);
+  await loadPage.waitForFunction((want) => document.querySelector('textarea[aria-label="Install command"]')?.value === want, customCommand, { timeout: 10000 }).then(
+    () => check(true, "Save then Load restores the customized base build (same install command)"),
+    () => check(false, "Save then Load restores the customized base build (same install command)")
+  );
+  check(await loadPage.getByText("(customized)", { exact: false }).isVisible(), "the loaded build is still marked customized");
+  await loadPage.close();
+  await basePage.close();
 
   // Old-version share link: must still open, with the notice
   const oldPayload = toPayload({ distro: "debian13", display: "wayland", font: "jetbrains-mono", choices: { sway: { variant: null }, waybar: { variant: "minimal" } } }, "0.0.1");

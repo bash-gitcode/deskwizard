@@ -114,6 +114,7 @@ catalog.extras.forEach((e, i) => {
     `files/extras/${e.id}.txt`,
     [
       `order=${i}`,
+      ...(e.option ? [`option=${e.option}`] : []),
       ...DISTROS.flatMap((d) => (e.packages[d] ?? []).map((p) => `package.${d}=${p}`)),
       ...e.autostart.map((a) => `autostart=${a}`),
     ]
@@ -138,7 +139,14 @@ for (const t of catalog.tools) {
     ...t.variants.map((v) => `variant=${v.id}`),
     ...t.install.map((i) => ["install", i.from, i.source, i.target, i.binary ? "binary" : "text"].join(TAB)),
   ];
-  putData(`files/tools/${t.id}.txt`, head.map((l) => l + "\n").join("") + bindRows(t.binds));
+  // Option rows: key, type, default, min, max, scale, pattern, true_text, false_text. "-" means none.
+  const optionRows = t.options
+    .map((o) =>
+      ["option", o.key, o.type, String(o.default), dash(o.min), dash(o.max), dash(o.scale), dash(o.pattern), dash(o.true_text), dash(o.false_text)]
+        .join(TAB) + "\n"
+    )
+    .join("");
+  putData(`files/tools/${t.id}.txt`, head.map((l) => l + "\n").join("") + optionRows + bindRows(t.binds));
 
   // Shipped config files, verified by the manifest like everything else.
   for (const [name, text] of Object.entries(t.files)) putRaw(`files/tools/${t.id}/src/${name}`, text, false);

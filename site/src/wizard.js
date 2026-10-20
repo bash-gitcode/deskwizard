@@ -13,10 +13,13 @@ import {
   DEFAULT_START,
   MAX_CODE_LENGTH,
   PALETTE_COLOR_TOKENS,
+  stateFromBase,
+  isCustomized,
 } from "./generator.js";
 
 const HASH_KEY = "build=";
 const NEEDED_LABEL = { required: "Required", recommended: "Recommended", optional: "Optional" };
+const SCREENSHOT_NOTE = "Screenshots use the default palette and sample values for hardware that CI does not have.";
 // Folder of the installer the Review page links to: the latest stable release tag (written by the Pages build),
 // or v1 (latest compatible) when no release exists yet.
 const latestDir = fetch("latest.json")
@@ -39,6 +42,70 @@ function el(tag, props = {}, ...children) {
     node.append(child instanceof Node ? child : document.createTextNode(String(child)));
   }
   return node;
+}
+
+// ---- scene viewer -----------------------------------------------------------
+// One scene image at a time in a native <dialog> (Esc closes it). The arrow keys and the buttons move through the
+// list the image was opened from: a tool's looks, or all the bases.
+let viewer = null;
+let viewerItems = [];
+let viewerIndex = 0;
+
+function showScene() {
+  const item = viewerItems[viewerIndex];
+  viewer.querySelector("img").src = item.src;
+  viewer.querySelector("img").alt = item.alt;
+  viewer.querySelector("figcaption").textContent = item.caption;
+  viewer.querySelector(".viewer-count").textContent = `${viewerIndex + 1} of ${viewerItems.length}`;
+}
+
+function moveScene(delta) {
+  viewerIndex = (viewerIndex + delta + viewerItems.length) % viewerItems.length;
+  showScene();
+}
+
+function openViewer(items, index) {
+  if (!viewer) {
+    viewer = el(
+      "dialog",
+      { class: "viewer", "aria-label": "Scene viewer" },
+      el("figure", {}, el("img", { alt: "" }), el("figcaption", {})),
+      el(
+        "div",
+        { class: "viewer-controls" },
+        el("button", { type: "button", onclick: () => moveScene(-1) }, "Previous"),
+        el("span", { class: "viewer-count", "aria-live": "polite" }),
+        el("button", { type: "button", onclick: () => moveScene(1) }, "Next"),
+        el("button", { type: "button", onclick: () => viewer.close() }, "Close")
+      )
+    );
+    viewer.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        moveScene(-1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        moveScene(1);
+      }
+    });
+    // A click outside the dialog's content (on the backdrop) closes it.
+    viewer.addEventListener("click", (e) => {
+      if (e.target === viewer) viewer.close();
+    });
+    document.body.append(viewer);
+  }
+  viewerItems = items;
+  viewerIndex = index;
+  showScene();
+  viewer.showModal();
+}
+
+function baseScene(base) {
+  return { src: base.image, alt: base.image_alt, caption: base.name };
+}
+
+function variantScene(tool, variant) {
+  return { src: variant.screenshot, alt: variant.screenshot_alt, caption: `${tool.name}: ${variant.name}` };
 }
 
 // ---- payload helpers --------------------------------------------------------
@@ -93,17 +160,20 @@ export function startWizard(root, catalog) {
   const addOns = catalog.tools.filter((t) => t.type !== "compositor").sort((a, b) => a.display.order - b.display.order);
 
   const steps = [
+    { id: "begin", title: "Start" },
     { id: "distro", title: "Distro" },
     { id: "display", title: "Display system" },
     { id: "compositor", title: "Compositor" },
     { id: "palette", title: "Palette" },
     { id: "font", title: "Font" },
     ...addOns.map((tool) => ({ id: `tool:${tool.id}`, title: tool.name, tool })),
+    // Settings for a tool, e.g. "Sway settings". Shown for each compositor that declares options.
+    ...compositors.filter((t) => t.options?.length).map((tool) => ({ id: `options:${tool.id}`, title: `${tool.name} settings`, tool })),
     { id: "start", title: "Start method" },
     { id: "review", title: "Review" },
   ];
 
-  const freshState = () => ({ distro: null, display: "wayland", font: catalog.fonts.default, palette: DEFAULT_PALETTE, start: DEFAULT_START, extras: [], choices: {} });
+  const freshState = () => ({ distro: null, display: "wayland", font: catalog.fonts.default, palette: DEFAULT_PALETTE, start: DEFAULT_START, extras: [], choices: {}, options: {} });
   // Fills a missing font, palette or extras list (older formats) with defaults, so every build has all three.
   const withDefaults = (state) => ({
     ...state,
@@ -111,6 +181,7 @@ export function startWizard(root, catalog) {
     palette: state.palette ?? DEFAULT_PALETTE,
     extras: state.extras ?? [],
     start: state.start ?? DEFAULT_START,
+    options: state.options ?? {},
   });
 
   const app = { state: freshState(), index: 0, message: "", notices: [] };
@@ -150,6 +221,60 @@ export function startWizard(root, catalog) {
   }
 
   // ---- step renderers -----------------------------------------------------
+  // Quick install, a base, or a blank build. A base fills every later step; the user can change any of them.
+  function beginStep() {
+    const bases = catalog.bases ?? [];
+    const quick = bases[0];
+    return [
+      el("p", {}, "Pick how to start. Every choice can be changed on the next steps."),
+      el(
+        "div",
+        { class: "cards" },
+        el(
+          "div",
+          { class: "card" },
+          el("h3", {}, "Quick install"),
+          quick ? el("p", {}, `${quick.name}: ${quick.description}`) : null,
+          quick
+            ? el("button", { type: "button", class: "primary", onclick: () => { app.state = stateFromBase(quick); app.notices = []; go(steps.length - 1); } }, "Use Quick install")
+            : null
+        ),
+        el(
+          "div",
+          { class: "card" },
+          el("h3", {}, "Build your own"),
+          el("p", {}, "Choose every step yourself, starting from nothing."),
+          el("button", { type: "button", onclick: () => { app.state = freshState(); app.notices = []; go(1); } }, "Start a blank build")
+        )
+      ),
+      el("h3", {}, "Pick a base"),
+      el("p", { class: "meta" }, SCREENSHOT_NOTE),
+      el(
+        "div",
+        { class: "cards" },
+        bases.map((base, i) =>
+          el(
+            "div",
+            { class: "card" },
+            el(
+              "button",
+              {
+                type: "button",
+                class: "shot",
+                "aria-label": `Enlarge the ${base.name} scene`,
+                onclick: () => openViewer(bases.map(baseScene), i),
+              },
+              el("img", { src: base.image, alt: base.image_alt, width: 1920, height: 1080, loading: "lazy" })
+            ),
+            el("h3", {}, base.name),
+            el("p", {}, base.description),
+            el("button", { type: "button", onclick: () => { app.state = stateFromBase(base); app.notices = []; go(1); } }, `Use ${base.name}`)
+          )
+        )
+      ),
+    ];
+  }
+
   function distroStep() {
     return [
       el("p", {}, "Pick the distribution you run. Only Debian 13 “trixie” is supported right now."),
@@ -401,18 +526,21 @@ export function startWizard(root, catalog) {
       );
     }
 
-    const variantCards = tool.variants.map((v) => {
+    const variantCards = tool.variants.map((v, i) => {
       const selected = choice?.variant === v.id;
       return el(
         "article",
         { class: `card variant${selected ? " selected" : ""}` },
-        el("img", {
-          src: v.screenshot,
-          alt: `Placeholder screenshot of the ${v.name} look`,
-          width: 480,
-          height: 240,
-          loading: "lazy",
-        }),
+        el(
+          "button",
+          {
+            type: "button",
+            class: "shot",
+            "aria-label": `Enlarge the ${v.name} look`,
+            onclick: () => openViewer(tool.variants.map((x) => variantScene(tool, x)), i),
+          },
+          el("img", { src: v.screenshot, alt: v.screenshot_alt, width: 480, height: 240, loading: "lazy" })
+        ),
         el("h3", { text: v.name }),
         el("p", { class: "meta" }, "Good for: ", v.good_for.join(", ")),
         swatchStrip(currentPalette()),
@@ -440,6 +568,7 @@ export function startWizard(root, catalog) {
             "section",
             { class: "variants" },
             el("h3", {}, "Pick a look"),
+            el("p", { class: "meta" }, SCREENSHOT_NOTE),
             el("div", { class: "cards" }, variantCards),
             el(
               "div",
@@ -499,6 +628,67 @@ export function startWizard(root, catalog) {
             }),
             el("span", {}, el("strong", { text: s.name }), el("span", { class: "explain", text: ` ${s.summary}` }))
           )
+        )
+      ),
+    ];
+  }
+
+  // One control per option the tool declares. Defaults are preselected; only values that differ from the default are kept.
+  function optionsStep(tool) {
+    if (!app.state.choices[tool.id]) {
+      return [el("p", { class: "warn", role: "alert" }, `Choose ${tool.name} on the Compositor step first. Its settings are used only when it is chosen.`)];
+    }
+    const stored = app.state.options?.[tool.id] ?? {};
+    const setValue = (def, value) => {
+      app.state.options ??= {};
+      const obj = (app.state.options[tool.id] ??= {});
+      if (value === def.default) delete obj[def.key];
+      else obj[def.key] = value;
+      if (Object.keys(obj).length === 0) delete app.state.options[tool.id];
+      sync();
+    };
+    const control = (def) => {
+      const current = stored[def.key] ?? def.default;
+      if (def.type === "bool") {
+        return el("input", {
+          type: "checkbox",
+          checked: current === true,
+          onchange: (e) => setValue(def, e.target.checked),
+        });
+      }
+      if (def.type === "number") {
+        return el("input", {
+          type: "number",
+          min: def.min,
+          max: def.max,
+          step: 1,
+          value: current,
+          onchange: (e) => {
+            const raw = e.target.value.trim();
+            // Whole numbers are stored as numbers. Anything else is kept as typed, and the Review step reports it.
+            setValue(def, /^[0-9]+$/.test(raw) ? Number(raw) : raw);
+          },
+        });
+      }
+      const pattern = new RegExp(def.pattern);
+      const field = el("input", {
+        type: "text",
+        value: current,
+        onchange: (e) => setValue(def, e.target.value.trim()),
+      });
+      const hint = el("p", { class: "meta", role: "status" }, "");
+      field.addEventListener("input", () => {
+        hint.textContent = pattern.test(field.value.trim()) ? "" : "This value is not allowed. Example: us or us,de.";
+      });
+      return el("span", {}, field, hint);
+    };
+    return [
+      el("p", {}, `Settings for ${tool.name}. The defaults are selected. Change only what you need.`),
+      el(
+        "ul",
+        { class: "extras" },
+        tool.options.map((def) =>
+          el("li", {}, el("label", { class: "option" }, el("span", { text: def.label }), " ", control(def)))
         )
       ),
     ];
@@ -618,7 +808,9 @@ export function startWizard(root, catalog) {
   function render(moved = false) {
     const step = current();
     const isReview = step.id === "review";
+    const hideNext = isReview || step.id === "begin";
     const body = {
+      begin: beginStep,
       distro: distroStep,
       display: displayStep,
       compositor: compositorStep,
@@ -627,7 +819,7 @@ export function startWizard(root, catalog) {
       start: startStep,
       review: reviewStep,
     }[step.id];
-    const content = body ? body() : toolStep(step.tool);
+    const content = body ? body() : step.id.startsWith("options:") ? optionsStep(step.tool) : toolStep(step.tool);
 
     const heading = el("h2", { tabindex: "-1", id: "step-heading" }, step.title);
     const stepper = el(
@@ -653,10 +845,15 @@ export function startWizard(root, catalog) {
       "nav",
       { class: "nav" },
       el("button", { type: "button", disabled: app.index === 0, onclick: () => go(app.index - 1) }, "Back"),
-      isReview ? null : el("button", { type: "button", class: "primary", disabled: !canAdvance(), onclick: () => go(app.index + 1) }, "Next")
+      hideNext ? null : el("button", { type: "button", class: "primary", disabled: !canAdvance(), onclick: () => go(app.index + 1) }, "Next")
     );
 
-    const notices = app.notices.map((n) => el("p", { class: "notice", role: "note" }, n));
+    // A build that started from a base says so, and says when it has been customized.
+    const base = app.state.base ? (catalog.bases ?? []).find((b) => b.id === app.state.base) : null;
+    const basedOn = base
+      ? [el("p", { class: "meta" }, `Based on ${base.name}${isCustomized(app.state, base, catalog) ? " (customized)" : ""}.`)]
+      : [];
+    const notices = [...basedOn, ...app.notices.map((n) => el("p", { class: "notice", role: "note" }, n))];
 
     root.replaceChildren(
       el("section", { class: "wizard" }, notices, stepper, el("div", { class: "step" }, heading, content), app.message ? el("p", { role: "status" }, app.message) : null, nav)

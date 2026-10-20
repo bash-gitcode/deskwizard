@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT } from "./lib/load.mjs";
-import { BAR_EXTRA_PACKAGES, buildCode } from "../site/src/generator.js";
+import { BAR_EXTRA_PACKAGES, buildCode, stateFromBase } from "../site/src/generator.js";
 
 const catalog = JSON.parse(readFileSync(join(ROOT, "site", "public", "catalog.json"), "utf8"));
 const [cmd, start = "manual"] = process.argv.slice(2);
@@ -65,7 +65,54 @@ if (cmd === "packages") {
       catalog.catalog_version,
     ),
   );
+} else if (cmd === "base-code") {
+  // Build code for one catalog base (catalog/bases/<id>.yaml), exactly as the Quick install / Pick a base step builds it.
+  const base = (catalog.bases ?? []).find((b) => b.id === start);
+  if (!base) {
+    console.error(`ci-helpers: unknown base '${start}'`);
+    process.exit(1);
+  }
+  process.stdout.write(buildCode(stateFromBase(base), catalog.catalog_version));
+} else if (cmd === "sway-code") {
+  // Build code for the Sway config check: the default build, with every Sway option at its default, min or max.
+  // Numbers take min or max; bools take the value that is not the default (false for min, true for max).
+  const preset = start;
+  if (!["default", "min", "max"].includes(preset)) {
+    console.error("ci-helpers: sway-code takes default, min or max");
+    process.exit(2);
+  }
+  const sway = catalog.tools.find((t) => t.id === "sway");
+  const options = {};
+  for (const o of sway.options) {
+    if (preset === "default") options[o.key] = o.default;
+    else if (o.type === "number") options[o.key] = preset === "min" ? o.min : o.max;
+    else if (o.type === "bool") options[o.key] = preset === "max";
+    else options[o.key] = o.default;
+  }
+  process.stdout.write(
+    buildCode(
+      {
+        distro: "debian13",
+        display: "wayland",
+        font: "jetbrains-mono",
+        palette: "midnight",
+        start: "manual",
+        // The screenshot and media-keys extras add the Print, volume and brightness binds, so the check covers them.
+        extras: ["screenshot", "media-keys"],
+        choices: {
+          sway: { variant: null },
+          waybar: { variant: "minimal" },
+          mako: { variant: "corner" },
+          swaybg: { variant: "dusk" },
+          foot: { variant: "classic" },
+          fuzzel: { variant: "classic" },
+        },
+        options: { sway: options },
+      },
+      catalog.catalog_version,
+    ),
+  );
 } else {
-  console.error("usage: node scripts/ci-helpers.mjs packages|font|code <start>");
+  console.error("usage: node scripts/ci-helpers.mjs packages|font|code <start>|sway-code <default|min|max>|base-code <base id>");
   process.exit(2);
 }

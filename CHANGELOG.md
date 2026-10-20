@@ -3,6 +3,12 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/). Each tag keeps its own `/vX.Y.Z/` folder on the site; `/v1/` is the latest compatible folder (see README).
 
+## Unreleased (Phase 3a, partial)
+
+### Added
+
+- Support level per distro (`verified-vm`, `package-checked`, `community`) in `catalog/distros.yaml`. `npm run check-support` fails if a claim is stronger than the CI jobs prove. Debian 13 stays `package-checked`.
+
 ## [0.1.0] - unreleased (set the date when the tag is cut)
 
 First public release. Phase 1 scope only.
