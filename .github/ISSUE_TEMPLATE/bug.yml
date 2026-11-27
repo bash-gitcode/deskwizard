@@ -1,0 +1,35 @@
+name: Bug report
+description: The wizard, the installer, or the uninstaller did something wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not paste secrets or build codes that you consider private. For a security problem, use SECURITY.md instead."
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the build code or the wizard choices, if you can.
+  - type: input
+    id: version
+    attributes:
+      label: Installer version or git commit
+      placeholder: v0.1.0 or the commit hash
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output of `bash install.sh --build <code> --dry-run` or the error text
+      render: shell
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution and version (from /etc/os-release)
+      placeholder: Debian GNU/Linux 13 (trixie)

@@ -9,12 +9,22 @@
 // Run after build-catalog: npm run build-catalog && node scripts/generate-install.mjs
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { ROOT } from "./lib/load.mjs";
+import { renderInstaller } from "./lib/installer-base.mjs";
 
 const PUBLIC = join(ROOT, "site", "public");
 const SRC = join(ROOT, "site", "src");
-const V1 = join(PUBLIC, "v1");
+
+// Two modes:
+//   default: writes site/public/v1/ (the "latest compatible" folder on the site).
+//   DESKWIZARD_SNAPSHOT_TAG=v0.1.0 DESKWIZARD_OUT_ROOT=<dir>: writes <dir>/v0.1.0/, an immutable
+//     snapshot whose installer fetches from https://bash-gitcode.github.io/deskwizard/v0.1.0/.
+const TAG = process.env.DESKWIZARD_SNAPSHOT_TAG || "";
+if (TAG && !/^v\d+\.\d+\.\d+(-rc\d+)?$/.test(TAG)) throw new Error(`bad DESKWIZARD_SNAPSHOT_TAG: ${TAG}`);
+const DIR = TAG || "v1";
+const OUT_ROOT = TAG ? resolve(process.env.DESKWIZARD_OUT_ROOT || join(ROOT, "snapshots")) : PUBLIC;
+const V1 = join(OUT_ROOT, DIR);
 const catalog = JSON.parse(readFileSync(join(PUBLIC, "catalog.json"), "utf8"));
 const DISTROS = catalog.distros.map((d) => d.id);
 
@@ -143,12 +153,18 @@ for (const t of catalog.tools) {
 
 // Install script, uninstall script, and the manifest that lists every file.
 mkdirSync(V1, { recursive: true });
-copyFileSync(join(SRC, "installer.sh"), join(V1, "install.sh"));
+// The installer's SITE_BASE is set to the folder it is served from, so manifest and files always match its download.
+writeFileSync(join(V1, "install.sh"), renderInstaller(readFileSync(join(SRC, "installer.sh"), "utf8"), DIR));
 copyFileSync(join(SRC, "uninstall.sh"), join(V1, "uninstall.sh"));
 const installBytes = readFileSync(join(V1, "install.sh"));
 const installSha = createHash("sha256").update(installBytes).digest("hex");
+const sumLine = (name) => {
+  const digest = createHash("sha256").update(readFileSync(join(V1, name))).digest("hex");
+  return `${digest}  ${name}\n`;
+};
 writeFileSync(join(V1, "install.sh.sha256"), `${installSha}  install.sh\n`);
-copyFileSync(join(V1, "install.sh"), join(PUBLIC, "install.sh"));
+writeFileSync(join(V1, "uninstall.sh.sha256"), sumLine("uninstall.sh"));
+if (!TAG) copyFileSync(join(V1, "install.sh"), join(PUBLIC, "install.sh"));
 
 const manifest = {
   catalog_version: catalog.catalog_version,
@@ -168,6 +184,7 @@ const json = [
   "",
 ].join("\n");
 writeFileSync(join(V1, "manifest.json"), json);
+writeFileSync(join(V1, "manifest.json.sha256"), sumLine("manifest.json"));
 console.log(
-  `generate-install: wrote site/public/v1 (${ids.length} ids, ${files.length} data files, install.sh sha256 ${installSha})`
+  `generate-install: wrote ${V1} (${ids.length} ids, ${files.length} data files, install.sh sha256 ${installSha})`
 );

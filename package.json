@@ -9,9 +9,14 @@
     "node": ">=20"
   },
   "scripts": {
+    "prepare": "node scripts/render-wallpapers.mjs",
     "render-wallpapers": "node scripts/render-wallpapers.mjs",
     "validate": "node scripts/validate.mjs",
     "check-secrets": "node scripts/check-secrets.mjs",
+    "check-catalog-refs": "node scripts/check-catalog-refs.mjs",
+    "check-manifest": "node scripts/check-manifest.mjs",
+    "new-tool": "node scripts/new-tool.mjs",
+    "new-variant": "node scripts/new-variant.mjs",
     "build-catalog": "node scripts/build-catalog.mjs",
     "generate-install": "node scripts/generate-install.mjs",
     "dev": "vite --config vite.config.js",

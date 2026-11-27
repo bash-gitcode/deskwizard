@@ -1,0 +1,67 @@
+name: release
+
+# Runs on a tag like v0.1.0. See RELEASING.md for the maintainer steps.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    uses: ./.github/workflows/smoke.yml
+
+  publish:
+    needs: smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Verify the built output against its sources
+        run: npm run -s check-manifest
+      # The versioned snapshot (install.sh, uninstall.sh, manifest.json, files/, *.sha256) is built from this tag.
+      # Its installer fetches from /<tag>/, so the one-liner and the data always match.
+      - name: Build the versioned snapshot
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          DESKWIZARD_SNAPSHOT_TAG="$TAG" DESKWIZARD_OUT_ROOT="$RUNNER_TEMP/snap" node scripts/generate-install.mjs
+          snap="$RUNNER_TEMP/snap/$TAG"
+          grep -qxF "SITE_BASE=\"https://bash-gitcode.github.io/deskwizard/$TAG\"" "$snap/install.sh"
+          (cd "$snap" && sha256sum -c install.sh.sha256 uninstall.sh.sha256 manifest.json.sha256)
+          tar -C "$RUNNER_TEMP/snap" -czf "$RUNNER_TEMP/snapshot-$TAG.tar.gz" "$TAG"
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # rc tags (v0.1.0-rc1) are marked as pre-releases automatically.
+          pre_flag=""
+          case "$TAG" in *-rc*) pre_flag="--prerelease" ;; esac
+          snap="$RUNNER_TEMP/snap/$TAG"
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "deskwizard $TAG" \
+            --notes-file "$GITHUB_WORKSPACE/CHANGELOG.md" \
+            $pre_flag \
+            "$snap/install.sh" "$snap/install.sh.sha256" \
+            "$snap/uninstall.sh" "$snap/uninstall.sh.sha256" \
+            "$snap/manifest.json" "$snap/manifest.json.sha256" \
+            "$RUNNER_TEMP/snapshot-$TAG.tar.gz"
+
+      # Publishes /<tag>/ on the site. pages.yml restores every snapshot asset, so older tags stay in place.
+      - name: Publish the snapshot on the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main

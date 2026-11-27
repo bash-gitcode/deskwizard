@@ -1,0 +1,31 @@
+name: New tool request
+description: Suggest a tool for the wizard (Sway, Debian 13)
+labels: [tool-request]
+body:
+  - type: input
+    id: tool
+    attributes:
+      label: Tool name and upstream project
+      placeholder: "foot (https://codeberg.org/dnkl/foot)"
+    validations:
+      required: true
+  - type: input
+    id: package
+    attributes:
+      label: Debian 13 package name
+      description: Check with `apt-cache policy <name>` in a debian:trixie container.
+  - type: input
+    id: licence
+    attributes:
+      label: Upstream licence
+  - type: textarea
+    id: why
+    attributes:
+      label: Why should it be in the wizard?
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Files it needs (config, wallpapers, fonts)
+      description: Say where each file comes from and its licence. Third-party art or fonts need a compatible licence stated here (see CONTRIBUTING.md).
