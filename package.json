@@ -14,6 +14,7 @@
     "validate": "node scripts/validate.mjs",
     "check-secrets": "node scripts/check-secrets.mjs",
     "check-catalog-refs": "node scripts/check-catalog-refs.mjs",
+    "check-support": "node scripts/check-support.mjs",
     "check-manifest": "node scripts/check-manifest.mjs",
     "new-tool": "node scripts/new-tool.mjs",
     "new-variant": "node scripts/new-variant.mjs",

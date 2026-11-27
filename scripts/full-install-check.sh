@@ -119,6 +119,62 @@ if swaymsg -t get_tree | grep -q '"app_id": "lxpolkit"'; then
 fi
 grim "$OUT/full-install.png" 2>> "$OUT/grim.log" || fail=1
 
+# 5b. Bind checks. Run the exact command each bind in the installed config runs (no keypress is sent).
+# slurp is stubbed to print a fixed region. pactl, brightnessctl and playerctl are stubbed to log their
+# arguments, so the media keys are checked without audio or brightness hardware. Screenshots are saved to
+# ~/Pictures/Screenshots. The check removes that folder first, so the bind must create it. CI only: the
+# check runs in a fresh container.
+BIND_BIN="$OUT/bind-bin"; mkdir -p "$BIND_BIN"
+OUT_ABS="$(cd "$OUT" && pwd)"; BIND_LOG="$OUT_ABS/bind-args.log"; : > "$BIND_LOG"
+printf '#!/bin/sh\necho "0,0 200x100"\n' > "$BIND_BIN/slurp"
+for tool in pactl brightnessctl playerctl; do
+  printf '#!/bin/sh\necho "%s $*" >> "%s"\n' "$tool" "$BIND_LOG" > "$BIND_BIN/$tool"
+done
+chmod +x "$BIND_BIN"/*
+
+# The command for one bind, exactly as the installer wrote it after the key.
+bind_cmd() { awk -v p="bindsym $1 " 'index($0,p)==1{print substr($0,length(p)+1); exit}' "$SWAY_CFG"; }
+# Run the bind's command the way sway runs `exec` (sh -c, with the stubs first on PATH).
+run_bind() {
+  local cmd; cmd="$(bind_cmd "$1")"
+  if [ -z "$cmd" ]; then note "- bind $1 in $SWAY_CFG: FAIL (not found)"; fail=1; return 1; fi
+  PATH="$BIND_BIN:$PATH" sh -c "${cmd#exec }" >> "$OUT_ABS/bind.log" 2>&1
+}
+
+SHOTS="$HOME/Pictures/Screenshots"
+for key in Print Shift+Print; do
+  rm -rf "$SHOTS"
+  run_bind "$key" || true
+  png=$(find "$SHOTS" -maxdepth 1 -name '*.png' -size +0c 2>/dev/null | head -n 1)
+  if [ -n "$png" ] && [ "$(head -c 8 "$png" | od -An -tx1 | tr -d ' \n')" = 89504e470d0a1a0a ]; then
+    cp "$png" "$OUT_ABS/bind-$(echo "$key" | tr -c 'A-Za-z0-9' '_').png"
+    note "- bind $key saves a non-empty PNG to Pictures/Screenshots (folder created): PASS"
+  else
+    note "- bind $key saves a non-empty PNG to Pictures/Screenshots: FAIL"
+    fail=1
+  fi
+done
+
+# Media keys: each bind must call its tool with the expected arguments.
+check_media() {
+  : > "$BIND_LOG"
+  run_bind "$1" || true
+  if grep -qxF -- "$2" "$BIND_LOG"; then
+    note "- bind $1 runs '$2': PASS"
+  else
+    note "- bind $1 runs '$2': FAIL (logged: $(tr '\n' ';' < "$BIND_LOG"))"
+    fail=1
+  fi
+}
+check_media XF86AudioRaiseVolume "pactl set-sink-volume @DEFAULT_SINK@ +5%"
+check_media XF86AudioLowerVolume "pactl set-sink-volume @DEFAULT_SINK@ -5%"
+check_media XF86AudioMute "pactl set-sink-mute @DEFAULT_SINK@ toggle"
+check_media XF86MonBrightnessUp "brightnessctl set +5%"
+check_media XF86MonBrightnessDown "brightnessctl set 5%-"
+check_media XF86AudioPlay "playerctl play-pause"
+check_media XF86AudioNext "playerctl next"
+check_media XF86AudioPrev "playerctl previous"
+
 # 6. Every desktop program the config starts must still be running.
 for tool in waybar mako swaybg foot; do
   if pgrep -x "$tool" >/dev/null 2>&1; then

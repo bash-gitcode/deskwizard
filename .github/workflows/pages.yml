@@ -3,6 +3,9 @@ name: Pages
 on:
   push:
     branches: [main]
+  # Pull requests run the same build (so a missing scene image or a broken build fails before merge), but the
+  # deploy job below is main-only.
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -11,7 +14,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  # Pull requests get their own group, so a PR run never cancels a main deploy.
+  group: ${{ github.event_name == 'pull_request' && format('pages-pr-{0}', github.event.number) || 'pages' }}
   cancel-in-progress: true
 
 jobs:
@@ -19,8 +23,12 @@ jobs:
   smoke:
     uses: ./.github/workflows/smoke.yml
 
+  # The scene images on the site (base scenes and tool crops), captured and cropped on headless Sway.
+  scene-shots:
+    uses: ./.github/workflows/screenshots.yml
+
   build:
-    needs: smoke
+    needs: [smoke, scene-shots]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -29,17 +37,17 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Download the smoke screenshots
+      - name: Download the scene images
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          name: tool-smoke
-          path: smoke-out
+          name: scene-shots
+          path: scene-shots
       # Wallpaper PNGs are gitignored; render them from the committed SVGs before the catalog reads them.
       - run: npm run -s render-wallpapers
       # The copy step reads the variant list from the catalog, so build it first.
       - run: npm run -s build-catalog
-      # Fails if any variant's screenshot is missing.
-      - run: node scripts/copy-screenshots.mjs smoke-out
+      # Fails if any image the catalog references is missing or empty.
+      - run: node scripts/copy-screenshots.mjs scene-shots
       # Runs validate, build-catalog, generate-install (install.sh) and the Vite build.
       - run: npm run build
       - run: test -s dist/install.sh && test -s dist/catalog.json
@@ -73,6 +81,8 @@ jobs:
 
   deploy:
     needs: build
+    # Main only: pull requests build the site but never publish it.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

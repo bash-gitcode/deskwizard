@@ -1,0 +1,8 @@
+{
+  "allowed": [
+    {
+      "files": ["foot-classic.webp", "foot-underline.webp"],
+      "reason": "Known limitation, not a design choice: the two foot configs differ only in cursor style and blink. Neither capture shows a foot cursor (measured: the two desktop captures differ only at the waybar clock, 39 pixels), so the scene cannot show the difference. Remove this entry once the scene shows a cursor."
+    }
+  ]
+}
